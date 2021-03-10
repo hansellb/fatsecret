@@ -10,7 +10,7 @@ function addProduct(event, element) {
     if (formInput.nodeName === 'INPUT' && formInput.type === 'text') {
       if (formInput.name !== 'id') {
         data[formInput.name] = formInput.value;
-      } 
+      }
     }
   }
 
@@ -33,23 +33,23 @@ function getProducts() {
     .then(res => {
       const products = res.data;
       const productListElem = document.getElementById('existing_products');
-    
+
       let listHTML = '';
-    
+
       products.forEach(product => {
         const listTagOpen = '<li' + ' id="' + product._id + '">';
         const listTagClose = '</li>';
         listHTML += listTagOpen + ' <span>' + product.name + '</span> <span>' + product.price + listTagClose + '</span>';
       });
       productListElem.innerHTML = listHTML;
-    
+
       products.forEach(product => {
         let listElem = document.getElementById(product._id);
         listElem.addEventListener('click', (event) => {
           const id = event.currentTarget.id;
           const name = event.currentTarget.querySelector('span:first-child').innerText;
           const price = event.currentTarget.querySelector('span:nth-child(2)').innerText;
-          
+
           const formElem = document.getElementById('product_form');
           const formInputs = formElem.elements;
           for (var i=0; i < formInputs.length; i++) {
@@ -80,7 +80,7 @@ function getProducts() {
 function updateProduct() {
   const formElem = document.getElementById('product_form');
   const formInputs = formElem.elements;
-  
+
   let data = {};
   for (var i=0; i < formInputs.length; i++) {
     let formInput = formInputs[i];
@@ -88,7 +88,7 @@ function updateProduct() {
         data[formInput.name] = formInput.value;
     }
   }
-  
+
   axios.put('/products', data)
   .then(res => {
     console.log(res);

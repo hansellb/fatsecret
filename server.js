@@ -3,6 +3,7 @@
 
 // we've started you off with Express (https://expressjs.com/)
 // but feel free to use whatever libraries or frameworks you'd like through `package.json`.
+require('dotenv').config();
 const express = require("express");
 const bodyParser = require('body-parser');
 const mongoClient = require('mongodb').MongoClient;
@@ -29,23 +30,23 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
     console.log('Connected to Database!')
     const db = client.db('test1');
     const collection = db.collection('collection1');
-  
+
     // make all the files in 'public' available
     // https://expressjs.com/en/starter/static-files.html
-  
+
     app.use(express.static("public"));
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: true }));
     app.use(bodyParser.raw());
-  
-  
+
+
     // https://expressjs.com/en/starter/basic-routing.html
     app.get("/", (request, response) => {
       response.sendFile(__dirname + "/views/index.html");
     });
 
-  
-  
+
+
     app.get('/env', (req, res) => {
       res.json(fatSecret);
     });
@@ -61,7 +62,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
         response.status(500).send(error);
       });
     });
-  
+
     app.post('/products', (request, response) => {
       const reqBody = request.body;
       if (!reqBody || !reqBody.name || !reqBody.price) {
@@ -76,7 +77,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
           response.status(500).send(error)
         });
     });
-  
+
     app.put('/products', (request, response) => {
       const reqBody = request.body;
       if (!reqBody || !reqBody.id || !reqBody.name || !reqBody.price) {
@@ -109,7 +110,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
         .catch(error => {
           response.status(500).send(error)
         });
-      
+
       //collection.findOneAndReplace(query, newDocument, options)
       //  .then(result => {
       //    response.status(201).send(result);
@@ -130,11 +131,11 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
           "nutritional_info": {"calories":"123"}
         });
     });
-  
+
     app.post('/food', (request, response) => {
 //      console.log(req);
 //      console.log(req.body, req.params, req.query);
-      
+
       let reqType = '';
       if (request.body.weight) {
         reqType = 'body';
@@ -143,13 +144,13 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
       } else if (request.query.weight) {
         reqType = 'query';
       }
-      
+
       if (!reqType) {
         response.status(200).json({ message: 'No payload received!!!'});
       }
-      
+
       let message = 'weight was ' + request[reqType].weight;
-      
+
 //      console.log('1. Searching for food in FatSecret API...');
       searchFoods('banana')
       .then(res => {
@@ -157,20 +158,20 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
         if (res.error) {
           res.status(200).send(res);
         }
-        
+
         const genericFoods = res.foods.food.filter(food => food.food_type==='Generic');
 //        console.dir(genericFoods);
-        
+
         const genericFood = genericFoods[0];
         let servingDetails;
-        
+
         searchFoodDetails(genericFood.food_id).
         then(res => {
 //          console.log(res);
           servingDetails = res.food.servings.serving
           .filter(serving => serving.serving_description === '100 g' && serving.measurement_description === 'g');
           console.log(servingDetails);
-      
+
           response.status(200).send({
             "message": message,
             "food_info": {
@@ -184,9 +185,9 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
       .catch(err => console.error('Error -> POST /food -> searchFoods().catch', err));
 
     });
-  
-  
-  
+
+
+
     app.get('*', (req, res) => {
       res.sendStatus(200);
     });
@@ -207,10 +208,10 @@ function expiredFatSecretAccessToken() {
   if (!fatSecret || !fatSecret.access_token) {
     return true;
   }
-  
+
   const created_tms = fatSecret.access_token.created_tms;
   const expired_tms = new Date(Date.now() - fatSecret.access_token.expires_in*1000 )
-  
+
   return expired_tms > created_tms;
 }
 
@@ -251,7 +252,7 @@ async function getFatSecretAccessToken() {
 //    return res.json();
 //  })
 //  .catch(err => console.error('Error -> getFatSecretAccessToken() -> fetch().catch', err));
-  
+
 //  fetch(url, options)
 //  .then((res) => {
 //    console.log (res);
@@ -281,7 +282,7 @@ async function searchFoods(searchStr) {
 //    .catch(err => console.error('Error -> searchFoods() -> await getFatSecretAccessToken().catch', err));
     await getFatSecretAccessToken();
   }
-  
+
   let url = 'https://platform.fatsecret.com/rest/server.api';
 
   const params = new URLSearchParams();
@@ -316,7 +317,7 @@ async function searchFoodDetails(foodId) {
   if (expiredFatSecretAccessToken()) {
     await getFatSecretAccessToken();
   }
-  
+
   const params = new URLSearchParams();
   params.append('method', 'food.get.v2');
   params.append('food_id', foodId);
