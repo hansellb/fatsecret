@@ -1,0 +1,44 @@
+<!-- This is a static file -->
+<!-- served from your routes in server.js -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A cool thing made with Glitch">
+    <title>TEST</title>
+    <link id="favicon" rel="icon" href="https://glitch.com/edit/favicon-app.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="/script.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <h1>TEST</h1>
+    </header>
+
+    <main>
+      <form id="product_form" name="product_form" action="/products" method="POST" onsubmit="addProduct(event, this)">
+        <input type="hidden" placeholder="id" name="id">
+        <input type="text" placeholder="name" name="name">
+        <input type="text" placeholder="price" name="price">
+        <button type="submit">Submit</button>
+        <button type="button" onclick="updateProduct(this)">Update</button>
+      </form>
+      
+      <section>
+        <header>
+          <h2>Existing products</h2>
+        </header>
+        <button type="button" onclick="getProducts()">Get Products</button>
+        <ul id="existing_products"></ul>
+      </section>
+    </main>
+
+    <!-- include the Glitch button to show what the webpage is about and
+          to make it easier for folks to view source and remix -->
+    <div class="glitchButton" style="position:fixed;top:2em;right:20px;"></div>
+    <script src="https://button.glitch.me/button.js" defer></script>
+  </body>
+</html>
