@@ -186,7 +186,8 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
         return response.status(500).json({ error: 'Could not read image: ' + err });
       }
 
-      let imgLabels;
+      let allImgLabels;
+      let filteredImgLabels;
       let food;
 
       getImgLabels(img_b64)
@@ -205,12 +206,20 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
           });
         }
 
-        imgLabels = resImg.responses[0].labelAnnotations.filter(label => {
+        allImgLabels = resImg.responses[0].labelAnnotations;
+        filteredImgLabels = allImgLabels.filter(label => {
           const regex = new RegExp(".*(food|fruit|plant)(s)*.*", "gi");
           return !regex.test(label.description);
         });
-//        console.dir(imgLabels);
-        return searchFoods(imgLabels[0].description);
+//        console.dir(allImgLabels, filteredImgLables.length, filteredImgLabels);
+        if (!filteredImgLabels.length) {
+          throw ({
+            error: 'Could not detect food from image',
+            status: 404,
+            labelsFound: allImgLabels
+          });
+        }
+        return searchFoods(filteredImgLabels[0].description);
       })
       .then(resFoods => {
 //        console.dir(resFoods);
@@ -225,7 +234,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
           throw ({
             error: 'Could not find any info about the food',
             status: 404,
-            labelsFound: imgLabels,
+            labelsFound: allImgLabels,
             infoFound: resFoods
           });
         }
@@ -236,7 +245,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
           throw ({
             error: 'Could not find any info about the food',
             status: 404,
-            labelsFound: imgLabels,
+            labelsFound: allImgLabels,
             infoFound: resFoods
           });
         }
@@ -254,7 +263,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
             "summary": food.food_description,
             "details": servingDetails
           },
-          "imgLabels": imgLabels
+          "allImgLabels": allImgLabels
         });
       })
       .catch(err => {
