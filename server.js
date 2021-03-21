@@ -10,6 +10,7 @@ const mongoClient = require('mongodb').MongoClient;
 const objectId = require('mongodb').ObjectId;
 const fetch = require('node-fetch');
 const fileupload = require('express-fileupload');
+const fs = require('fs');
 const { URLSearchParams } = require('url');
 
 const app = express();
@@ -188,6 +189,8 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
 
       let allImgLabels;
       let filteredImgLabels;
+      let searchTerm;
+      let allFoods;
       let food;
 
       getImgLabels(img_b64)
@@ -219,7 +222,11 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
             labelsFound: allImgLabels
           });
         }
-        return searchFoods(filteredImgLabels[0].description);
+
+        const selectedImgLabel = filteredImgLabels[0];
+        searchTerm = selectedImgLabel.description;
+
+        return searchFoods(searchTerm);
       })
       .then(resFoods => {
 //        console.dir(resFoods);
@@ -238,7 +245,17 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
             infoFound: resFoods
           });
         }
+
+        if (!resFoods || !resFoods.foods || !resFoods.foods.food) {
+          throw ({
+            error: 'Could not find any info about the food',
+            status: 404,
+            labelsFound: allImgLabels,
+            infoFound: resFoods
+          });
+        }
 //        console.dir(resFoods.foods.food);
+        allFoods = resFoods.foods.food;
         food = resFoods.foods.food.filter(food => food.food_type==='Generic')[0];
 
         if (!food) {
@@ -258,12 +275,14 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
 
         return response.status(200).send({
           "message": 'weight was ' + request.body.weight,
+          "searchTerm": searchTerm,
           "food_info": {
             "name": resFoodDetails.food.food_name,
             "summary": food.food_description,
             "details": servingDetails
           },
-          "allImgLabels": allImgLabels
+          "allImgLabels": allImgLabels,
+          "allFoods": allFoods
         });
       })
       .catch(err => {
@@ -486,7 +505,7 @@ async function searchFoods(searchStr) {
   params.append('search_expression', searchStr);
   params.append('format', 'json');
   params.append('page_number', 0);
-  params.append('max_results', 2);
+  params.append('max_results', 5);
 
   let options = {
     method: 'post',
@@ -569,7 +588,7 @@ async function getImgLabels(imgBase64) {
         "features": [
           {
             "type": "LABEL_DETECTION",
-            "maxResults": 5
+            "maxResults": 25
           }
         ]
       }
