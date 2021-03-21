@@ -11,6 +11,7 @@ const objectId = require('mongodb').ObjectId;
 const fetch = require('node-fetch');
 const fileupload = require('express-fileupload');
 const fs = require('fs');
+const os = require('os');
 const { URLSearchParams } = require('url');
 
 const app = express();
@@ -36,7 +37,8 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
     // make all the files in 'public' available
     // https://expressjs.com/en/starter/static-files.html
 
-    app.use(express.static("public"));
+    app.use(express.static('public'));
+    app.use(express.static(os.tmpdir() + '/smarty'));
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
     app.use(express.raw());
@@ -45,7 +47,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
         fileSize: 25 * 1024 * 1024
       },
       useTempFiles: true,
-      tempFileDir: '/tmp'
+      tempFileDir: os.tmpdir() + '/smarty'
     }));
 
 
@@ -132,22 +134,50 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
 
 
 
+    app.get('/img', (req, res) => {
+      let imgsHtml = '';
+
+      const imgsPath = fs.opendirSync(os.tmpdir() + '/smarty');
+      let dirEntity;
+
+      while((dirEntity = imgsPath.readSync()) !== null) {
+        if (dirEntity.isFile()) {
+          imgsHtml+='<img height="200" width="200" src="http://localhost:3000/' + dirEntity.name + '">';
+        }
+      }
+
+      const html = `
+      <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="X-UA-Compatible" content="IE=edge">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Images</title>
+          </head>
+          <body>
+            ${imgsHtml}
+          </body>
+        </html>`;
+      res.send(html);
+    });
+
     app.post('/img', (req, res) => {
-      console.log(req);
-      if (!req.files || !req.files.img_b64) {
-        return res.status(400).send({ error: 'You have to POST a file (img_b64)'});
+//      console.log(req);
+      if (!req.files || !req.files.img) {
+        return res.status(400).send({ error: 'You have to POST a file with the name "img"'});
       }
 
       const options = {
         encoding: 'base64'
       };
 
-      fs.readFile(req.files.img_b64.tempFilePath, options, (err, data) => {
+      fs.readFile(req.files.img.tempFilePath, options, (err, data) => {
         if (err) {
           throw err;
         }
 
-        console.log(data);
+//        console.log(data);
         res.status(200).send();
       });
     });
