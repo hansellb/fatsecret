@@ -142,7 +142,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
 
       while((dirEntity = imgsPath.readSync()) !== null) {
         if (dirEntity.isFile()) {
-          imgsHtml+='<img height="200" width="200" src="http://localhost:3000/' + dirEntity.name + '">';
+          imgsHtml+='<img height="200" width="200" src="' + dirEntity.name + '">';
         }
       }
 
