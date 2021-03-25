@@ -54,3 +54,70 @@ footer {
   padding-top: 1.5em;
   border-top: 1px solid lightgrey;
 }
+
+.tag-table {
+  display: flex;
+}
+
+.tag-table-column {
+  flex: 1;
+  overflow: auto;
+}
+
+.flex-container {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.img-container {
+  display: inline-block;
+  position: relative;
+}
+
+.img-container img {
+  height: 200px;
+  width: 200px;
+}
+
+/*
+.img-container:hover .delete-overlay{
+  background-color: rgba(0,0,0,0.5); /* Black background with opacity
+  cursor: pointer; /* Add a pointer on hover
+  display: inline-block;
+  color: red;
+  font-size: 1.9em;
+  line-height: 6em;
+  position: absolute; /* Sit on top of the page content
+  width: 100%; /* Full width
+  height: 100%; /* Full height
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  text-align: center;
+  z-index: 2; /* Specify a stack order in case you're using a different order for other elements
+  opacity: 1;
+}
+
+.delete-overlay {
+  display: none;
+}
+*/
+
+.img-container:hover .delete-overlay{
+  opacity: 1;
+}
+
+.delete-overlay {
+  background-color: rgba(62, 62, 62, 0.646);
+  color: rgba(255, 52, 52, 0.945);
+  font-size: 1.9em;
+  line-height: 6em;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  position: absolute;
+  text-align: center;
+  text-shadow:-3px 3px 5px rgba(64, 0, 0, 0.75);
+  transition: all 0.3s ease;
+}
