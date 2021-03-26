@@ -12,6 +12,7 @@ const fetch = require('node-fetch');
 const fileupload = require('express-fileupload');
 const fs = require('fs');
 const os = require('os');
+const path = require('path');
 const { URLSearchParams } = require('url');
 
 const app = express();
@@ -21,24 +22,36 @@ const mongo_opts = {
   useUnifiedTopology: true // Remove "DeprecationWarning: current Server Discovery and Monitoring..."
 };
 
+const tmpdir = path.join(os.tmpdir(), 'smarty');
 let fatSecret = {};
 // mongoClient.connect(mongo_conn_str, mongo_opts, (err, client) => {
 //  if (err) return console.error(err)
 //  console.log('Connected to Database!')
 //});
 
-// Using promises in mongoClient
-mongoClient.connect(mongo_conn_str, mongo_opts)
-  .then(client => {
-    console.log('Connected to MongoDB Atlas DB!!!')
-    const db = client.db('test1');
-    const collection = db.collection('collection1');
+const tmpdirCreated = fs.mkdirSync(tmpdir, { recursive: true });
+if (!tmpdirCreated) {
+  const tmpdirExists = fs.statSync(tmpdir);
+  if (!tmpdirExists) {
+    console.log('Error while creating tmpdir -> ', tmpdirExists);
+  }
+  console.log('tmpdir already exists -> created on:', tmpdirExists.birthtime);
+} else {
+  console.log('tmpdir created!!! -> mkdir: ', mkdirResult);
+}
+
+// // Using promises in mongoClient
+// mongoClient.connect(mongo_conn_str, mongo_opts)
+//   .then(client => {
+//     console.log('Connected to MongoDB Atlas DB!!!')
+//     const db = client.db('test1');
+//     const collection = db.collection('collection1');
 
     // make all the files in 'public' available
     // https://expressjs.com/en/starter/static-files.html
 
     app.use(express.static('public'));
-    app.use(express.static(os.tmpdir() + '/smarty'));
+    app.use(express.static(tmpdir));
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
     app.use(express.raw());
@@ -47,7 +60,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
         fileSize: 25 * 1024 * 1024
       },
       useTempFiles: true,
-      tempFileDir: os.tmpdir() + '/smarty'
+      tempFileDir: tmpdir
     }));
 
 
@@ -135,16 +148,22 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
 
 
     app.get('/img', (req, res) => {
-      let imgsHtml = '';
+      let imgsHtml = '<div class="flex-container">';
 
-      const imgsPath = fs.opendirSync(os.tmpdir() + '/smarty');
+      const imgsDir = fs.opendirSync(tmpdir);
       let dirEntity;
+      let imgNames = [];
 
-      while((dirEntity = imgsPath.readSync()) !== null) {
+      while((dirEntity = imgsDir.readSync()) !== null) {
         if (dirEntity.isFile()) {
-          imgsHtml+='<img height="200" width="200" src="' + dirEntity.name + '">';
+          imgsHtml+='<div class="img-container" onclick=deleteImage("' + dirEntity.name + '")><div class="delete-overlay">Click to delete</div><img src="' + dirEntity.name + '"></div>';
+          imgNames.push(dirEntity.name);
         }
       }
+
+      imgsDir.closeSync();
+
+      imgsHtml += '</div>';
 
       const html = `
       <!DOCTYPE html>
@@ -154,39 +173,85 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
             <meta http-equiv="X-UA-Compatible" content="IE=edge">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>Images</title>
+            <link rel="stylesheet" href="/style.css">
+            <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+            <script src="/script.js" defer></script>
           </head>
           <body>
             ${imgsHtml}
           </body>
         </html>`;
-      res.send(html);
+      // res.send(html);
+      res.status(200).json({ imgs: imgNames });
     });
 
     app.post('/img', (req, res) => {
 //      console.log(req);
-      if (!req.files || !req.files.img) {
-        return res.status(400).send({ error: 'You have to POST a file with the name "img"'});
+      if (!req.body) {
+        return res.status(400).json({ error: 'No payload received!!!'})
       }
+
+      if (!req.files) {
+        return res.status(400).json({ error: 'No image received!!!'});
+      }
+
+      const imgFilePath = req.files[Object.keys(req.files)[0]].tempFilePath;
 
       const options = {
         encoding: 'base64'
       };
 
-      fs.readFile(req.files.img.tempFilePath, options, (err, data) => {
+      fs.readFile(imgFilePath, options, (err, data) => {
         if (err) {
           throw err;
         }
-
 //        console.log(data);
-        res.status(200).send();
+        res.status(201).json({ message: `File successfully uploaded!!! -> ${imgFilePath}`});
+      });
+    });
+
+    app.delete('/img/:imgName', (req, res) => {
+      if (!req.params || !req.params.imgName) {
+        return res.sendStatus(400);
+      }
+
+      const imgFile = path.join(tmpdir, req.params.imgName);
+
+      // Using Node.js File System Synchronous API
+      // const imgFileStat = fs.statSync(imgFile);
+      // // console.log(imgFileStat);
+      // if (!imgFileStat) {
+      //   return res.sendStatus(404);
+      // }
+
+      // const imgFileDeleted = fs.rmSync(imgFile);
+      // if (imgFileDeleted !== undefined) {
+      //   return res.sendStatus(500);
+      // }
+      // return res.sendStatus(200);
+
+      // Using Node.js File System Callback/Asynchronous API
+      fs.stat(imgFile, (err) => {
+        if (err) {
+          console.log(err);
+          return res.status(500).json(err);
+        }
+
+        fs.rm(imgFile, (err) => {
+          if (err) {
+            console.log(err);
+            return res.status(500).json(err);
+          }
+          return res.sendStatus(200);
+        });
       });
     });
 
 
 
     app.get('/food', (req, res) => {
-      console.log(req);
-      console.log(req.params, req.query);
+      // console.log(req);
+      // console.log(req.params, req.query);
       res.send(
         {
           "item": "banana",
@@ -223,7 +288,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
       let allFoods;
       let food;
 
-      getImgLabels(img_b64)
+      analyzeImageWithGoogle(request.files.img.tempFilePath)
       .then(resImg => {
         if (!resImg || !resImg.responses) {
           throw ({
@@ -316,8 +381,8 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
         });
       })
       .catch(err => {
-        console.error('Error -> POST /food -> getImgLabels().then.then.then.catch', err);
-        response.status(err.status || 400).json(err);
+        console.error('Error -> POST /food -> analyzeImageWithGoogle().then.then.then.catch', err);
+        return response.status(err.status || 500).json(err);
       });
 
     });
@@ -387,7 +452,7 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
 //       let imgLabels;
 //       let food;
 
-//       getImgLabels(request.body.img_b64)
+//       analyzeImageWithGoogle(request.body.img_b64)
 //       .then(resImg => {
 //         if (!resImg || !resImg.responses) {
 //           return response.status(400).json({ error: 'Could not detect image'});
@@ -425,11 +490,54 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
 //         });
 //       })
 //       .catch(err => {
-//         console.error('Error -> POST /food -> getImgLabels().then.then.then.catch', err);
+//         console.error('Error -> POST /food -> analyzeImageWithGoogle().then.then.then.catch', err);
 //         response.status(400).send(err);
 //       });
 
 //     });
+
+
+
+    app.post('/compare', (request, response) => {
+      // console.log(request);
+      if (!request.body) {
+        return response.status(400).json({ error: 'No payload received!!!'})
+      }
+
+      if (!request.files) {
+        return response.status(400).json({ error: 'No image received!!!'});
+      }
+
+      const imgFilePath = request.files[Object.keys(request.files)[0]].tempFilePath;
+      const azureRequest = analyzeImageWithAzure(imgFilePath, 'tag');
+      const googleRequest = analyzeImageWithGoogle(imgFilePath)
+
+      Promise.all([azureRequest, googleRequest])
+      .then((values) => {
+        // console.log(values);
+
+        if (values[0].tags || (values[1].responses && values[1].responses[0].labelAnnotations)) {
+          return response.json({
+            azure: values[0].tags,
+            google: values[1].responses[0].labelAnnotations
+          });
+        }
+        return response.status(200).json(values);
+      })
+      .catch(error => {
+        console.error('Error -> POST /compare -> Promise.all.catch', error);
+        return response.status(error.status || 500).json(error);
+      });
+
+      // analyzeImageWithAzure(imgFile.tempFilePath, 'tag')
+      // .then(result => {
+      //   return response.send(result);
+      // })
+      // .catch(error => {
+      //   console.error('Error -> POST /compare -> analyzeImageWithAzure().catch', error);
+      //   return response.status(error.status || 500).json(error);
+      // });
+    });
 
 
 
@@ -441,10 +549,10 @@ mongoClient.connect(mongo_conn_str, mongo_opts)
     const listener = app.listen(process.env.PORT, () => {
       console.log("Your app is listening on port " + listener.address().port);
     });
-  })
-  .catch(err => {
-    console.error(err);
-  });
+  // })
+  // .catch(err => {
+  //   console.error(err);
+  // });
 
 /*
  *
@@ -465,7 +573,7 @@ function expiredFatSecretAccessToken() {
  **/
 async function getFatSecretAccessToken() {
 //  let url = `https://httpbin.org/basic-auth/${username}/${password}`
-  let url = 'https://oauth.fatsecret.com/connect/token';
+  let url = process.env.fatsecret_access_token_url;
 //  let url = 'https://pokeapi.co/api/v2/pokemon/1';
 //  let url = 'https://httpbin.org/post';
   let authString = `${process.env.fatsecret_user}:${process.env.fatsecret_pass}`
@@ -483,6 +591,7 @@ async function getFatSecretAccessToken() {
     headers: { 'Authorization': 'Basic ' + Buffer.from(authString).toString('base64') }
   };
 
+  console.log('Requesting a new FatSecret Access Token...');
   const response = await fetch(url, options);
   const data = await response.json();
   fatSecret.access_token = {
@@ -528,7 +637,7 @@ async function searchFoods(searchStr) {
     await getFatSecretAccessToken();
   }
 
-  let url = 'https://platform.fatsecret.com/rest/server.api';
+  let url = process.env.fatsecret_api_url;
 
   const params = new URLSearchParams();
   params.append('method', 'foods.search');
@@ -543,6 +652,7 @@ async function searchFoods(searchStr) {
     headers: { 'Authorization': 'Bearer ' + fatSecret.access_token.value }
   };
 
+  console.log(`Requesting search results for "${searchStr}" from FatSecret API...`);
   return fetch(url, options)
   .then(res => {
 //    console.log('5. Response -> searchFoods() -> fetch().then');
@@ -581,7 +691,8 @@ async function searchFoodDetails(foodId) {
     headers: { 'Authorization': 'Bearer ' + fatSecret.access_token.value }
   };
 
-  return fetch(process.env.fatsecret_url, options)
+  console.log('Requesting FOOD DETAILS from FatSecret API...');
+  return fetch(process.env.fatsecret_api_url, options)
   .then(res => {
 //    console.log('Response -> searchFoodDetails() -> fetch().then');
     if (!res.ok || res.error) {
@@ -603,17 +714,17 @@ async function searchFoodDetails(foodId) {
 /**
  * Use Google Vision API to get image labels (identify what is in the image)
  *
- * @param {*} imgBase64
+ * @param {*} imgFilePath path to the image file to send along with the request
  * @returns all the labels identified by Google's Vision API
  */
-async function getImgLabels(imgBase64) {
-  const url = 'https://vision.googleapis.com/v1/images:annotate?key=' + process.env.vision_api_key;
+async function analyzeImageWithGoogle(imgFilePath) {
+  const url = process.env.google_vision_api_url + process.env.google_vision_api_key;
 
   const payload = {
     "requests": [
       {
         "image": {
-          "content": imgBase64
+          "content": fs.readFileSync(imgFilePath, { encoding: 'base64' })
         },
         "features": [
           {
@@ -630,11 +741,12 @@ async function getImgLabels(imgBase64) {
     body: JSON.stringify(payload) // JSON.stringify is a MUST, otherwise, Google Vision API returns 400 Bad Request
   };
 
+  console.log('Requesting image analysis from Google\'s Vision API...');
   return fetch(url, options)
   .then(res => {
-//    console.log('Response -> getImgLabels() -> fetch().then', res)
+//    console.log('Response -> analyzeImageWithGoogle() -> fetch().then', res)
     if (!res.ok || res.error) {
-      console.log('Error -> getImgLabels() -> fetch().then', res);
+      console.log('Error -> analyzeImageWithGoogle() -> fetch().then', res);
       throw {
         "error": res.error || '',
         status: res.status,
@@ -644,7 +756,7 @@ async function getImgLabels(imgBase64) {
     return res.json();
   })
   .catch(err => {
-    console.error('Error ->getImgLabels() -> fetch().catch', err);
+    console.error('Error ->analyzeImageWithGoogle() -> fetch().catch', err);
     throw err;
   });
 }
@@ -654,7 +766,7 @@ async function getImgLabels(imgBase64) {
  * Uses @google-cloud/vision Node.js library
  * @param base64Img image's Base64 encoded value
  */
-async function getImgLabelsUsingLibrary(base64Img) {
+async function analyzeImageWithGoogleUsingLibrary(base64Img) {
   // Imports the Google Cloud client library
   const vision = require('@google-cloud/vision');
 
@@ -668,3 +780,71 @@ async function getImgLabelsUsingLibrary(base64Img) {
   labels.forEach(label => console.log(label.description));
 }
 
+/**
+ * Use Azure Computer Vision API to get image tags / labels (identify what is in the image)
+ *
+ * @param {*} imgFilePath path to the image file to send along with the request
+ * @returns all the tags identified by Azure's Computer Vision API
+ */
+async function analyzeImageWithAzure (imgFilePath, endpoint) {
+  const endpoints = {
+    analyze: {
+      url: '/analyze',
+      params: '?visualFeatures=Adult,Brands,Categories,Color,Description,Faces,ImageType,Objects,Tags&details=Celebrities,Landmarks&language=[en|es|ja|pt|zh]'
+    },
+    describe: {
+      url: '/describe',
+      params: '?maxCandidates=12&language=[en|es|ja|pt|zh]'
+    },
+    detect: {
+      url: 'detect'
+    },
+    areaOfInterest: {},
+    generateThumbnail: {},
+    ocr: {},
+    read: {},
+    tag: {
+      url: '/tag',
+      params: '?language=en'
+    }
+  };
+
+  const headers = {
+    content_type: {
+      json: 'application/json',
+      binary: 'application/octet-stream',
+      form: 'multipart/form-data'
+    }
+  };
+
+
+  const url = process.env.azure_computer_vision_api_url + endpoints[endpoint].url;
+
+  const fetch_options = {
+    method: 'POST',
+    headers: {
+      'Content-Type': headers.content_type.binary,
+      'Content-Length': fs.statSync(imgFilePath).size,
+      'Ocp-Apim-Subscription-Key': process.env.azure_computer_vision_api_key
+    },
+    body: fs.readFileSync(imgFilePath)
+  };
+
+  console.log('Requesting image analysis from Azure\'s Computer Vision API...');
+  return fetch(url, fetch_options)
+  .then(res => {
+    if (!res.ok || res.error) {
+      console.log('Error -> analyzeImageWithAzure() -> fetch().then', res);
+      throw {
+        "error": res.error || '',
+        status: res.status,
+        statusText: res.statusText
+      };
+    }
+    return res.json();
+  })
+  .catch(err => {
+    console.error('Error ->analyzeImageWithAzure() -> fetch().catch', err);
+    throw err;
+  });
+}

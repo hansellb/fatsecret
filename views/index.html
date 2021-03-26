@@ -19,6 +19,7 @@
     </header>
 
     <main>
+<!--
       <form id="product_form" name="product_form" action="/products" method="POST" onsubmit="addProduct(event, this)">
         <input type="hidden" placeholder="id" name="id">
         <input type="text" placeholder="name" name="name">
@@ -33,6 +34,48 @@
         </header>
         <button type="button" onclick="getProducts()">Get Products</button>
         <ul id="existing_products"></ul>
+      </section>
+-->
+      <section>
+        <header>
+          <h2>Upload an image without performing image analysis</h2>
+        </header>
+        <form id="img-upload" name="imgupload" action="/img" method="POST" enctype="multipart/form-data" onsubmit="uploadImage(event, this)">
+          <input type="file" placeholder="imgfile" name="imgfile">
+          <button type="button" onclick="loadImages()">Reload Images</button>
+          <button type="submit">Submit</button>
+        </form>
+        <div class="flex-container">
+
+        </div>
+      </section>
+
+      <section>
+        <header>
+          <h2>Compare image tag/label analysis between Azure, Google and AWS</h2>
+        </header>
+        <form id="img-upload-compare" name="imguploadcompare" action="/compare" method="POST" enctype="multipart/form-data" onsubmit="getImgAnalysis(event, this)">
+          <input type="file" placeholder="imgfile" name="imgfile">
+          <button type="submit">Submit</button>
+        </form>
+
+        <div class="tag-table">
+          <div class="tag-table-column">
+            <h3>Azure</h3>
+            <ul id="azure_tags"></ul>
+          </div>
+
+          <div class="tag-table-column">
+            <h3>Google</h3>
+            <ul id="google_labels"></ul>
+          </div>
+
+          <div class="tag-table-column">
+            <h3>AWS</h3>
+            <ul id="aws_labels"></ul>
+          </div>
+        </div>
+
       </section>
     </main>
 
