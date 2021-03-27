@@ -107,7 +107,7 @@ function loadImages(event, element) {
 
     imgsHTML = '';
     imgs.forEach(img => {
-      imgsHTML += '<div class="img-container" onclick=deleteImage("' + img + '")><div class="delete-overlay">Click to delete</div><img src="' + img + '"></div>'
+      imgsHTML += '<div class="img-container" onclick="deleteImage(\'' + img + '\', this)"><div class="delete-overlay">Click to delete</div><img src="' + img + '"></div>'
     });
 
     imgContainer.innerHTML = imgsHTML;
@@ -134,11 +134,12 @@ function uploadImage(event, element) {
   });
 }
 
-function deleteImage(imgName) {
+function deleteImage(imgName, element) {
   axios.delete('/img/' + imgName)
   .then(res => {
     // location.reload();
-    loadImages();
+    element.remove();
+//    loadImages();
   })
   .catch(err => {
     handleAxiosErrors(err);
