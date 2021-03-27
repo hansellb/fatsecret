@@ -219,19 +219,19 @@ if (!tmpdirCreated) {
 
       const imgFile = path.join(tmpdir, req.params.imgName);
 
-      // Using Node.js File System Synchronous API
-      // No need to check if file exists (fs.stat or fs.access) before operating on it
+      // // Using Node.js File System Synchronous API
+      // // No need to check if file exists (fs.stat or fs.access) before operating on it
       // const imgFileStat = fs.statSync(imgFile);
       // // console.log(imgFileStat);
       // if (!imgFileStat) {
       //   return res.sendStatus(404);
       // }
 
-      const imgFileDeleted = fs.rmSync(imgFile);
-      if (imgFileDeleted !== undefined) {
-        return res.sendStatus(500);
-      }
-      return res.sendStatus(200);
+      // const imgFileDeleted = fs.rmSync(imgFile);
+      // if (imgFileDeleted !== undefined) {
+      //   return res.sendStatus(500);
+      // }
+      // return res.sendStatus(200);
 
       // // Using Node.js File System Callback/Asynchronous API
       // fs.stat(imgFile, (err, stats) => {
@@ -253,21 +253,22 @@ if (!tmpdirCreated) {
       //   });
       // });
 
-      // // Using Node.js File System Promises - ONLY Works for Node.js versions > 14
-      // // According to Node.js documentation, it is not recommended to use fs.stat or fs.access
-      // // before fs.open(), fs.readFile() or fs.writeFile(), as it introduces a race condition
-      // fs.promises.rm(imgFile, { force: true })
-      // .then(result => {
-      //   // https://nodejs.org/api/fs.html#fs_fspromises_rm_path_options
-      //   // Fulfils with undefined upon success
-      //   if (result === undefined) {
-      //     return res.sendStatus(200);
-      //   }
-      //   return res.status(500).json(JSON.stringify(res));
-      // })
-      // .catch(error => {
-      //   return res.status(500).json(JSON.stringify(error));
-      // });
+      // Using Node.js File System Promises
+      // According to Node.js documentation, it is not recommended to use fs.stat or fs.access
+      // before fs.open(), fs.readFile() or fs.writeFile(), as it introduces a race condition
+      // Note: rm & rmSync are only available in Node.js > 14
+      fs.promises.rm(imgFile, { force: true })
+      .then(result => {
+        // https://nodejs.org/api/fs.html#fs_fspromises_rm_path_options
+        // Fulfils with undefined upon success
+        if (result === undefined) {
+          return res.sendStatus(200);
+        }
+        return res.status(500).json(JSON.stringify(res));
+      })
+      .catch(error => {
+        return res.status(500).json(JSON.stringify(error));
+      });
     });
 
 
