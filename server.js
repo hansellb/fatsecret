@@ -217,7 +217,7 @@ if (!tmpdirCreated) {
 
       const imgFile = path.join(tmpdir, req.params.imgName);
 
-      // Using Node.js File System Synchronous API
+      // // Using Node.js File System Synchronous API
       // const imgFileStat = fs.statSync(imgFile);
       // // console.log(imgFileStat);
       // if (!imgFileStat) {
@@ -230,20 +230,41 @@ if (!tmpdirCreated) {
       // }
       // return res.sendStatus(200);
 
-      // Using Node.js File System Callback/Asynchronous API
-      fs.stat(imgFile, (err) => {
-        if (err) {
-          console.log(err);
-          return res.status(500).json(err);
-        }
+      // // Using Node.js File System Callback/Asynchronous API
+      // fs.stat(imgFile, (err, stats) => {
+      //   if (err) {
+      //     console.log(err);
+      //     return res.status(500).json(err);
+      //   }
 
-        fs.rm(imgFile, (err) => {
-          if (err) {
-            console.log(err);
-            return res.status(500).json(err);
-          }
+      //   if (!stats.isFile()) {
+      //     return res.status(400).json({ error: 'Cannot delete resource' });
+      //   }
+
+      //   fs.rm(imgFile, { force: true }, err => {
+      //     if (err) {
+      //       console.log(err);
+      //       return res.status(500).json(err);
+      //     }
+      //     return res.sendStatus(200);
+      //   });
+      // });
+
+      // Using Node.js File System Promises
+      // According to Node.js documentation, it is not recommended to use fs.stat or fs.access
+      // before fs.open(), fs.readFile() or fs.writeFile(), as it introduces a race condition
+
+      fs.promises.rm(imgFile, { force: true })
+      .then(result => {
+        // https://nodejs.org/api/fs.html#fs_fspromises_rm_path_options
+        // Fulfils with undefined upon success
+        if (result === undefined) {
           return res.sendStatus(200);
-        });
+        }
+        return res.status(500).json(JSON.stringify(res));
+      })
+      .catch(error => {
+        return res.status(500).json(JSON.stringify(error));
       });
     });
 
