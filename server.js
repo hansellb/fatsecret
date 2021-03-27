@@ -37,7 +37,7 @@ if (!tmpdirCreated) {
   }
   console.log('tmpdir already exists -> created on:', tmpdirExists.birthtime);
 } else {
-  console.log('tmpdir created!!! -> mkdir: ', mkdirResult);
+  console.log('tmpdir created!!! -> mkdir: ', tmpdirCreated);
 }
 
 // // Using promises in mongoClient
