@@ -195,7 +195,9 @@ if (!tmpdirCreated) {
         return res.status(400).json({ error: 'No image received!!!'});
       }
 
-      const imgFilePath = req.files[Object.keys(req.files)[0]].tempFilePath;
+      const firstFileKey = Object.keys(req.files)[0];
+      const firstFile = Object.prototype.toString.call(req.files[firstFileKey]) === '[object Array]' ? req.files[firstFileKey][0] : req.files[firstFileKey];
+      const imgFilePath = firstFile.tempFilePath;
 
       const options = {
         encoding: 'base64'
@@ -206,7 +208,7 @@ if (!tmpdirCreated) {
           throw err;
         }
 //        console.log(data);
-        res.status(201).json({ message: `File successfully uploaded!!! -> ${imgFilePath}`});
+        res.status(201).json({ message: `File successfully uploaded!!! -> ${firstFile.name}@${imgFilePath}`});
       });
     });
 
@@ -287,21 +289,24 @@ if (!tmpdirCreated) {
       }
 
       if (!request.body.weight ) {
-        return response.status(400).json({ error: 'Payload MUST have weight and img_b64!!!'});
+        return response.status(400).json({ error: 'Payload MUST contain a \'weight\' property!!!'});
       }
 
-      if (!request.files || !request.files.img) {
+      if (!request.files) {
         return response.status(400).json({ error: 'No image received!!!'});
       }
 
+      const firstFileKey = Object.keys(request.files)[0];
+      const firstFile = Object.prototype.toString.call(request.files[firstFileKey]) === '[object Array]' ?
+        request.files[firstFileKey][0] : request.files[firstFileKey];
+      const imgFilePath = firstFile.tempFilePath;
 
-      let img_b64;
-      try {
-        img_b64 = fs.readFileSync(request.files.img.tempFilePath, { encoding: 'base64' });
-
-      } catch (err) {
-        return response.status(500).json({ error: 'Could not read image: ' + err });
-      }
+      // let img_b64;
+      // try {
+      //   img_b64 = fs.readFileSync(imgFilePath, { encoding: 'base64' });
+      // } catch (err) {
+      //   return response.status(500).json({ error: 'Could not read image: ' + err });
+      // }
 
       let allImgLabels;
       let filteredImgLabels;
@@ -309,7 +314,7 @@ if (!tmpdirCreated) {
       let allFoods;
       let food;
 
-      analyzeImageWithGoogle(request.files.img.tempFilePath)
+      analyzeImageWithGoogle(imgFilePath)
       .then(resImg => {
         if (!resImg || !resImg.responses) {
           throw ({
