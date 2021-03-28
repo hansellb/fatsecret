@@ -11,6 +11,7 @@ const objectId = require('mongodb').ObjectId;
 const fetch = require('node-fetch');
 const fileupload = require('express-fileupload');
 const fs = require('fs');
+const morgan = require('morgan');
 const os = require('os');
 const path = require('path');
 const { URLSearchParams } = require('url');
@@ -62,6 +63,7 @@ if (!tmpdirCreated) {
       useTempFiles: true,
       tempFileDir: tmpdir
     }));
+    app.use(morgan('common'));
 
 
 
@@ -208,7 +210,7 @@ if (!tmpdirCreated) {
           throw err;
         }
 //        console.log(data);
-        res.status(201).json({ message: `File successfully uploaded!!! -> ${firstFile.name}@${imgFilePath}`});
+        res.status(200).json({ message: `File successfully uploaded!!! -> ${firstFile.name}@${imgFilePath}`});
       });
     });
 
@@ -395,16 +397,24 @@ if (!tmpdirCreated) {
         const servingDetails = resFoodDetails.food.servings.serving
         .filter(serving => serving.serving_description === '100 g' && serving.measurement_description === 'g');
 
+        // return response.status(200).send({
+        //   "message": 'weight was ' + request.body.weight,
+        //   "searchTerm": searchTerm,
+        //   "food_info": {
+        //     "name": resFoodDetails.food.food_name,
+        //     "summary": food.food_description,
+        //     "details": servingDetails
+        //   },
+        //   "allImgLabels": allImgLabels,
+        //   "allFoods": allFoods
+        // });
         return response.status(200).send({
           "message": 'weight was ' + request.body.weight,
-          "searchTerm": searchTerm,
           "food_info": {
             "name": resFoodDetails.food.food_name,
             "summary": food.food_description,
             "details": servingDetails
-          },
-          "allImgLabels": allImgLabels,
-          "allFoods": allFoods
+          }
         });
       })
       .catch(err => {
@@ -574,7 +584,8 @@ if (!tmpdirCreated) {
 
     // listen for requests :)
     const listener = app.listen(process.env.PORT, () => {
-      console.log("Your app is listening on port " + listener.address().port);
+      // const currDate = new Date();
+      console.log(`[${new Date().toISOString()}] ` + "Your app is listening on port " + listener.address().port);
     });
   // })
   // .catch(err => {
