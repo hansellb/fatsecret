@@ -187,9 +187,9 @@ if (!tmpdirCreated) {
 
     app.post('/img', (req, res) => {
 //      console.log(req);
-      if (!req.body) {
-        return res.status(400).json({ error: 'No payload received!!!'})
-      }
+      // if (!req.body) {
+      //   return res.status(400).json({ error: 'No payload received!!!'})
+      // }
 
       if (!req.files) {
         return res.status(400).json({ error: 'No image received!!!'});
