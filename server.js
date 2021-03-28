@@ -410,6 +410,7 @@ if (!tmpdirCreated) {
         // });
         return response.status(200).send({
           "message": 'weight was ' + request.body.weight,
+          "searchTerm": searchTerm,
           "food_info": {
             "name": resFoodDetails.food.food_name,
             "summary": food.food_description,
