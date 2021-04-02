@@ -17,6 +17,14 @@ h1 {
   line-height: 1.1;
 }
 
+ul {
+  padding-inline-start: 0;
+}
+
+li {
+  font-size: 0.75em
+}
+
 form {
   background-color: #eee;
   display: grid;

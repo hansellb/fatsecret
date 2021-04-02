@@ -1,0 +1,126 @@
+openapi: 3.0.3
+info:
+  title: Smarty API
+  description: API to upload images and fetch image analysis [Smarty API & Web](http://smarty-hansellb.pitunnel.com/).
+  version: 0.0.1
+servers:
+  - url: http://smarty-hansellb.pitunnel.com/
+    description: PRO server
+  - url: http://localhost:3000/
+    description: DEV server for testing
+paths:
+  /img:
+    summary: Represents an image
+    description: >
+      This resource represents an image in the system.
+      Each image is identified by an `id`.
+    get:
+      summary: Returns a list of images.
+      description: A JSON array of image names. The list contains the **names** of the images
+      tags:
+        - Images
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                example: {imgs: ['image_1_file_name', 'image_2_file_name']}
+                type: object
+                properties:
+                  imgs:
+                    description: array of image names
+                    type: array
+    post:
+      summary: Upload an image
+      description: Only the first image is verified
+      tags:
+        - Images
+      requestBody:
+        description: Multipart form data with the uploaded image file
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                filename:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                example: { message: 'File successfully uploaded!!!' }
+                type: object
+                properties:
+                  message:
+                    description: Message describing the operation result
+                    type: string
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                example: { error: 'No image received!!!' }
+                type: object
+                properties:
+                  message:
+                    description: Message describing the error
+                    type: string
+  /img/{id}:
+    delete:
+      summary: Delete an image
+      description: Deletes the image
+      tags:
+        - Images
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: image filename
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                example: { message: 'Image deleted successfully!!!' }
+                type: object
+                properties:
+                  message:
+                    description: Message describing the operation result
+                    type: string
+        400:
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                example: { error: 'No image in payload!!!' }
+                type: object
+                properties:
+                  message:
+                    description: Message describing the error
+                    type: string
+        500:
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+# components:
+#   schemas:
+#     Images:
+#       type: object
+#       properties:
+#         imgs:
+#           type: array
+#           format: string
+#       required:
+#         - imgs

@@ -7,7 +7,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="A cool thing made with Glitch">
-    <title>TEST</title>
+    <title>Smarty</title>
     <link id="favicon" rel="icon" href="https://glitch.com/edit/favicon-app.ico" type="image/x-icon">
     <link rel="stylesheet" href="/style.css">
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
@@ -15,27 +15,10 @@
   </head>
   <body>
     <header>
-      <h1>TEST</h1>
+      <h1>Smarty</h1>
     </header>
 
     <main>
-<!--
-      <form id="product_form" name="product_form" action="/products" method="POST" onsubmit="addProduct(event, this)">
-        <input type="hidden" placeholder="id" name="id">
-        <input type="text" placeholder="name" name="name">
-        <input type="text" placeholder="price" name="price">
-        <button type="submit">Submit</button>
-        <button type="button" onclick="updateProduct(this)">Update</button>
-      </form>
-
-      <section>
-        <header>
-          <h2>Existing products</h2>
-        </header>
-        <button type="button" onclick="getProducts()">Get Products</button>
-        <ul id="existing_products"></ul>
-      </section>
--->
       <section>
         <header>
           <h2>Upload an image without performing image analysis</h2>
@@ -45,9 +28,7 @@
           <button type="button" onclick="loadImages()">Reload Images</button>
           <button type="submit">Submit</button>
         </form>
-        <div class="flex-container">
-
-        </div>
+        <div id="images-container" class="flex-container"></div>
       </section>
 
       <section>
@@ -64,24 +45,20 @@
             <h3>Azure</h3>
             <ul id="azure_tags"></ul>
           </div>
-
           <div class="tag-table-column">
             <h3>Google</h3>
             <ul id="google_labels"></ul>
           </div>
-
           <div class="tag-table-column">
             <h3>AWS</h3>
             <ul id="aws_labels"></ul>
           </div>
+          <div class="tag-table-column">
+            <h3>Clarifai</h3>
+            <ul id="clarifai_concepts"></ul>
+          </div>
         </div>
-
       </section>
     </main>
-
-    <!-- include the Glitch button to show what the webpage is about and
-          to make it easier for folks to view source and remix -->
-    <div class="glitchButton" style="position:fixed;top:2em;right:20px;"></div>
-    <script src="https://button.glitch.me/button.js" defer></script>
   </body>
 </html>
