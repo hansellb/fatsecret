@@ -1,34 +1,30 @@
-// server.js
-// where your node app starts
-
-// we've started you off with Express (https://expressjs.com/)
-// but feel free to use whatever libraries or frameworks you'd like through `package.json`.
 require('dotenv').config();
-const express = require("express");
-//const bodyParser = require('body-parser');
-const mongoClient = require('mongodb').MongoClient;
-const objectId = require('mongodb').ObjectId;
-const fetch = require('node-fetch');
-const fileupload = require('express-fileupload');
-const fs = require('fs');
-const morgan = require('morgan');
-const os = require('os');
-const path = require('path');
+const cors                = require('cors');
+const crypto              = require('crypto');
+const express             = require("express");
+const mongoClient         = require('mongodb').MongoClient;
+const objectId            = require('mongodb').ObjectId;
+const fetch               = require('node-fetch');
+const fileupload          = require('express-fileupload');
+const fs                  = require('fs');
+const morgan              = require('morgan');
+const os                  = require('os');
+const path                = require('path');
+const swaggerUi           = require('swagger-ui-express');
 const { URLSearchParams } = require('url');
+const yaml                = require('js-yaml');
 
 const app = express();
 
-const mongo_conn_str = `mongodb+srv://${process.env.mongodb_user}:${process.env.mongodb_pass}@cluster0.xu9wm.mongodb.net/test?retryWrites=true&w=majority`;
-const mongo_opts = {
-  useUnifiedTopology: true // Remove "DeprecationWarning: current Server Discovery and Monitoring..."
+const mongo_conn_str  = `mongodb+srv://${process.env.mongodb_user}:${process.env.mongodb_pass}@cluster0.xu9wm.mongodb.net/test?retryWrites=true&w=majority`;
+const mongo_opts      = {
+  useUnifiedTopology: true // Removes "DeprecationWarning: current Server Discovery and Monitoring..."
 };
 
-const tmpdir = path.join(os.tmpdir(), 'smarty');
-let fatSecret = {};
-// mongoClient.connect(mongo_conn_str, mongo_opts, (err, client) => {
-//  if (err) return console.error(err)
-//  console.log('Connected to Database!')
-//});
+// Holds the most recently generated access token to use FatSecret API
+let fatSecretAccessToken = {};
+const tmpdir  = path.join(os.tmpdir(), 'smarty');
+
 
 const tmpdirCreated = fs.mkdirSync(tmpdir, { recursive: true });
 if (!tmpdirCreated) {
@@ -41,568 +37,381 @@ if (!tmpdirCreated) {
   console.log('tmpdir created!!! -> mkdir: ', tmpdirCreated);
 }
 
-// // Using promises in mongoClient
-// mongoClient.connect(mongo_conn_str, mongo_opts)
-//   .then(client => {
-//     console.log('Connected to MongoDB Atlas DB!!!')
-//     const db = client.db('test1');
-//     const collection = db.collection('collection1');
+const swaggerDoc = yaml.load(fs.readFileSync('swagger.yml', 'utf8'));
 
-    // make all the files in 'public' available
-    // https://expressjs.com/en/starter/static-files.html
+// Setup Morgan logger
+app.use(morgan('common'));
 
-    app.use(express.static('public'));
-    app.use(express.static(tmpdir));
-    app.use(express.json());
-    app.use(express.urlencoded({ extended: true }));
-    app.use(express.raw());
-    app.use(fileupload({
-      limits: {
-        fileSize: 25 * 1024 * 1024
-      },
-      useTempFiles: true,
-      tempFileDir: tmpdir
-    }));
-    app.use(morgan('common'));
+// Create the swagger docs https://swagger.io/docs/specification/basic-structure/
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
+
+// Make all files in the "public" directory (in the same level as this file) available as static files at the "/" url
+app.use(express.static('public'));
+
+// Make all files in the ${tmpdir} directory available as static files at the "/" url
+app.use(express.static(tmpdir));
+
+// Extract a JSON object from the request body
+app.use(express.json());
+
+// Extract query parameters from the request URL
+app.use(express.urlencoded({ extended: true }));
+
+//
+app.use(express.raw());
+
+// Extract files from the request
+app.use(fileupload({
+  limits: {
+    fileSize: 25 * 1024 * 1024
+  },
+  useTempFiles: true,
+  tempFileDir: tmpdir
+}));
 
 
 
-    // https://expressjs.com/en/starter/basic-routing.html
-    app.get("/", (request, response) => {
-      response.sendFile(__dirname + "/views/index.html");
+// https://expressjs.com/en/starter/basic-routing.html
+app.get("/", (request, response) => {
+  response.sendFile(__dirname + "/views/index.html");
+});
+
+
+
+/**
+ * GET /img
+ *
+ * Returns a JSON object with a property containing an array of all images in the server
+ */
+app.get('/img', cors(), (req, res) => {
+  let imgsHtml = '<div class="flex-container">';
+
+  const imgsDir = fs.opendirSync(tmpdir);
+  let dirEntity;
+  let imgNames = [];
+
+  while ((dirEntity = imgsDir.readSync()) !== null) {
+    if (dirEntity.isFile()) {
+      imgsHtml += '<div class="img-container" onclick=deleteImage("' + dirEntity.name + '")><div class="delete-overlay">Click to delete</div><img src="' + dirEntity.name + '"></div>';
+      imgNames.push(dirEntity.name);
+    }
+  }
+
+  imgsDir.closeSync();
+
+  imgsHtml += '</div>';
+
+  const html = `
+  <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Images</title>
+        <link rel="stylesheet" href="/style.css">
+        <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+        <script src="/script.js" defer></script>
+      </head>
+      <body>
+        ${imgsHtml}
+      </body>
+    </html>`;
+  // res.send(html);
+  res.status(200).json({ imgs: imgNames });
+});
+
+/**
+ * POST /img
+ *
+ * Receives and stores the first uploaded image
+ */
+app.post('/img', (req, res) => {
+  if (!req.files) {
+    return res.status(400).json({ error: 'No image received!!!' });
+  }
+
+  const firstFileKey = Object.keys(req.files)[0];
+  const firstFile = Object.prototype.toString.call(req.files[firstFileKey]) === '[object Array]' ? req.files[firstFileKey][0] : req.files[firstFileKey];
+  const imgFilePath = firstFile.tempFilePath;
+
+  const options = {
+    encoding: 'base64'
+  };
+
+  fs.readFile(imgFilePath, options, (err, data) => {
+    if (err) {
+      throw err;
+    }
+    //        console.log(data);
+    res.status(200).json({ message: `File successfully uploaded!!! -> ${firstFile.name}@${imgFilePath}` });
+  });
+});
+
+/**
+ * DELETE /img
+ *
+ * Deletes an image
+ */
+app.delete('/img/:imgName', (req, res) => {
+  if (!req.params || !req.params.imgName) {
+    return res.status(400).json({ error: 'No image received!!!' });
+  }
+
+  const imgFile = path.join(tmpdir, req.params.imgName);
+
+  // Using Node.js File System Promises
+  // According to Node.js documentation, it is not recommended to use fs.stat or fs.access
+  // before fs.open(), fs.readFile() or fs.writeFile(), as it introduces a race condition
+  // Note: rm & rmSync are only available in Node.js > 14
+  fs.promises.rm(imgFile, { force: true })
+    .then(result => {
+      // Promise fulfils with "undefined" upon success: https://nodejs.org/api/fs.html#fs_fspromises_rm_path_options
+      return res.status(200).json({ message: 'Image deleted successfully!!!' });
+    })
+    .catch(error => {
+      // According to https://nodejs.org/api/fs.html#fs_fs_rm_path_options_callback
+      // "error" is an Error object: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
+      return res.status(500).json(JSON.stringify(error));
     });
-
-
-
-    app.get('/env', (req, res) => {
-      res.json(fatSecret);
-    });
-
-
-
-    app.get('/products', (request, response) => {
-      collection.find().toArray()
-      .then(result => {
-        response.status(200).send(result);
-      })
-      .catch(error => {
-        response.status(500).send(error);
-      });
-    });
-
-    app.post('/products', (request, response) => {
-      const reqBody = request.body;
-      if (!reqBody || !reqBody.name || !reqBody.price) {
-        response.status(400).json({error:'name or price cannot be empty'});
-        return;
-      }
-      collection.insertOne(reqBody)
-        .then(result => {
-          response.status(201).send(result);
-        })
-        .catch(error => {
-          response.status(500).send(error)
-        });
-    });
-
-    app.put('/products', (request, response) => {
-      const reqBody = request.body;
-      if (!reqBody || !reqBody.id || !reqBody.name || !reqBody.price) {
-        response.status(400).json({error:'name or price cannot be empty'});
-        return;
-      }
-      const query = {_id: objectId(reqBody.id)};
-      const newDocument = {
-        name: reqBody.name,
-        price: reqBody.price
-      };
-      const updateMode = {
-        $unset: {
-          product_name: "",
-          product_price: ""
-        },
-        $set: {
-          name: reqBody.name,
-          price: reqBody.price
-        }
-      };
-      const options = {
-        upsert: false
-      };
-
-      collection.findOneAndUpdate(query, updateMode, options)
-        .then(result => {
-          response.status(201).send(result);
-        })
-        .catch(error => {
-          response.status(500).send(error)
-        });
-
-      //collection.findOneAndReplace(query, newDocument, options)
-      //  .then(result => {
-      //    response.status(201).send(result);
-      //  })
-      //  .catch(error => {
-      //    response.status(500).send(error)
-      //  });
-    });
-
-
-
-    app.get('/img', (req, res) => {
-      let imgsHtml = '<div class="flex-container">';
-
-      const imgsDir = fs.opendirSync(tmpdir);
-      let dirEntity;
-      let imgNames = [];
-
-      while((dirEntity = imgsDir.readSync()) !== null) {
-        if (dirEntity.isFile()) {
-          imgsHtml+='<div class="img-container" onclick=deleteImage("' + dirEntity.name + '")><div class="delete-overlay">Click to delete</div><img src="' + dirEntity.name + '"></div>';
-          imgNames.push(dirEntity.name);
-        }
-      }
-
-      imgsDir.closeSync();
-
-      imgsHtml += '</div>';
-
-      const html = `
-      <!DOCTYPE html>
-        <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta http-equiv="X-UA-Compatible" content="IE=edge">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Images</title>
-            <link rel="stylesheet" href="/style.css">
-            <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-            <script src="/script.js" defer></script>
-          </head>
-          <body>
-            ${imgsHtml}
-          </body>
-        </html>`;
-      // res.send(html);
-      res.status(200).json({ imgs: imgNames });
-    });
-
-    app.post('/img', (req, res) => {
-//      console.log(req);
-      // if (!req.body) {
-      //   return res.status(400).json({ error: 'No payload received!!!'})
-      // }
-
-      if (!req.files) {
-        return res.status(400).json({ error: 'No image received!!!'});
-      }
-
-      const firstFileKey = Object.keys(req.files)[0];
-      const firstFile = Object.prototype.toString.call(req.files[firstFileKey]) === '[object Array]' ? req.files[firstFileKey][0] : req.files[firstFileKey];
-      const imgFilePath = firstFile.tempFilePath;
-
-      const options = {
-        encoding: 'base64'
-      };
-
-      fs.readFile(imgFilePath, options, (err, data) => {
-        if (err) {
-          throw err;
-        }
-//        console.log(data);
-        res.status(200).json({ message: `File successfully uploaded!!! -> ${firstFile.name}@${imgFilePath}`});
-      });
-    });
-
-    app.delete('/img/:imgName', (req, res) => {
-      if (!req.params || !req.params.imgName) {
-        return res.sendStatus(400);
-      }
-
-      const imgFile = path.join(tmpdir, req.params.imgName);
-
-      // // Using Node.js File System Synchronous API
-      // // No need to check if file exists (fs.stat or fs.access) before operating on it
-      // const imgFileStat = fs.statSync(imgFile);
-      // // console.log(imgFileStat);
-      // if (!imgFileStat) {
-      //   return res.sendStatus(404);
-      // }
-
-      // const imgFileDeleted = fs.rmSync(imgFile);
-      // if (imgFileDeleted !== undefined) {
-      //   return res.sendStatus(500);
-      // }
-      // return res.sendStatus(200);
-
-      // // Using Node.js File System Callback/Asynchronous API
-      // fs.stat(imgFile, (err, stats) => {
-      //   if (err) {
-      //     console.log(err);
-      //     return res.status(500).json(err);
-      //   }
-
-      //   if (!stats.isFile()) {
-      //     return res.status(400).json({ error: 'Cannot delete resource' });
-      //   }
-
-      //   fs.rm(imgFile, { force: true }, err => {
-      //     if (err) {
-      //       console.log(err);
-      //       return res.status(500).json(err);
-      //     }
-      //     return res.sendStatus(200);
-      //   });
-      // });
-
-      // Using Node.js File System Promises
-      // According to Node.js documentation, it is not recommended to use fs.stat or fs.access
-      // before fs.open(), fs.readFile() or fs.writeFile(), as it introduces a race condition
-      // Note: rm & rmSync are only available in Node.js > 14
-      fs.promises.rm(imgFile, { force: true })
-      .then(result => {
-        // https://nodejs.org/api/fs.html#fs_fspromises_rm_path_options
-        // Fulfils with undefined upon success
-        if (result === undefined) {
-          return res.sendStatus(200);
-        }
-        return res.status(500).json(JSON.stringify(res));
-      })
-      .catch(error => {
-        return res.status(500).json(JSON.stringify(error));
-      });
-    });
-
-
-
-    app.get('/food', (req, res) => {
-      // console.log(req);
-      // console.log(req.params, req.query);
-      res.send(
-        {
-          "item": "banana",
-          "nutritional_info": {"calories":"123"}
-        });
-    });
-
-    app.post('/food', (request, response) => {
-//      console.dir(request);
-      if (!request.body) {
-        return response.status(400).json({ error: 'No payload received!!!'})
-      }
-
-      if (!request.body.weight ) {
-        return response.status(400).json({ error: 'Payload MUST contain a \'weight\' property!!!'});
-      }
-
-      if (!request.files) {
-        return response.status(400).json({ error: 'No image received!!!'});
-      }
-
-      const firstFileKey = Object.keys(request.files)[0];
-      const firstFile = Object.prototype.toString.call(request.files[firstFileKey]) === '[object Array]' ?
-        request.files[firstFileKey][0] : request.files[firstFileKey];
-      const imgFilePath = firstFile.tempFilePath;
-
-      // let img_b64;
-      // try {
-      //   img_b64 = fs.readFileSync(imgFilePath, { encoding: 'base64' });
-      // } catch (err) {
-      //   return response.status(500).json({ error: 'Could not read image: ' + err });
-      // }
-
-      let allImgLabels;
-      let filteredImgLabels;
-      let searchTerm;
-      let allFoods;
-      let food;
-
-      analyzeImageWithGoogle(imgFilePath)
-      .then(resImg => {
-        if (!resImg || !resImg.responses) {
-          throw ({
-            error: 'Could not detect image',
-            status: 500,
-            labelsFound: resImg
-          });
-        } else if (resImg.responses[0].error) {
-          throw ({
-            error: resImg.responses[0].error,
-            status: 500,
-            labelsFound: resImg
-          });
-        }
-
-        allImgLabels = resImg.responses[0].labelAnnotations;
-        filteredImgLabels = allImgLabels.filter(label => {
-          const regex = new RegExp(".*(food|fruit|plant)(s)*.*", "gi");
-          return !regex.test(label.description);
-        });
-//        console.dir(allImgLabels, filteredImgLables.length, filteredImgLabels);
-        if (!filteredImgLabels.length) {
-          throw ({
-            error: 'Could not detect food from image',
-            status: 404,
-            labelsFound: allImgLabels
-          });
-        }
-
-        const selectedImgLabel = filteredImgLabels[0];
-        searchTerm = selectedImgLabel.description;
-
-        return searchFoods(searchTerm);
-      })
-      .then(resFoods => {
-//        console.dir(resFoods);
-        if (resFoods.error) {
-          throw ({
-            error: resFoods.error,
-            status: 500
-          });
-        }
-
-        if (!resFoods || resFoods.total_results == 0) {
-          throw ({
-            error: 'Could not find any info about the food',
-            status: 404,
-            labelsFound: allImgLabels,
-            infoFound: resFoods
-          });
-        }
-
-        if (!resFoods || !resFoods.foods || !resFoods.foods.food) {
-          throw ({
-            error: 'Could not find any info about the food',
-            status: 404,
-            labelsFound: allImgLabels,
-            infoFound: resFoods
-          });
-        }
-//        console.dir(resFoods.foods.food);
-        allFoods = resFoods.foods.food;
-        food = resFoods.foods.food.filter(food => food.food_type==='Generic')[0];
-
-        if (!food) {
-          throw ({
-            error: 'Could not find any info about the food',
-            status: 404,
-            labelsFound: allImgLabels,
-            infoFound: resFoods
-          });
-        }
-
-        return searchFoodDetails(food.food_id);
-      })
-      .then(resFoodDetails => {
-        const servingDetails = resFoodDetails.food.servings.serving
-        .filter(serving => serving.serving_description === '100 g' && serving.measurement_description === 'g');
-
-        // return response.status(200).send({
-        //   "message": 'weight was ' + request.body.weight,
-        //   "searchTerm": searchTerm,
-        //   "food_info": {
-        //     "name": resFoodDetails.food.food_name,
-        //     "summary": food.food_description,
-        //     "details": servingDetails
-        //   },
-        //   "allImgLabels": allImgLabels,
-        //   "allFoods": allFoods
-        // });
-        return response.status(200).send({
-          "message": 'weight was ' + request.body.weight,
-          "searchTerm": searchTerm,
-          "food_info": {
-            "name": resFoodDetails.food.food_name,
-            "summary": food.food_description,
-            "details": servingDetails
-          }
-        });
-      })
-      .catch(err => {
-        console.error('Error -> POST /food -> analyzeImageWithGoogle().then.then.then.catch', err);
-        return response.status(err.status || 500).json(err);
-      });
-
-    });
-
-//     app.post('/food', (request, response) => {
-// //      console.log(req);
-// //      console.log(req.body, req.params, req.query);
-
-//       // let reqType = '';
-//       // if (request.body.weight) {
-//       //   reqType = 'body';
-//       // } else if (request.params.weight) {
-//       //   reqType = 'params'
-//       // } else if (request.query.weight) {
-//       //   reqType = 'query';
-//       // }
-
-//       // if (!reqType) {
-//       //   response.status(200).json({ message: 'No payload received!!!'});
-//       //   return;
-//       // }
-
-//       // let message = 'weight was ' + request[reqType].weight;
-
-// // //      console.log('1. Searching for food in FatSecret API...');
-// //       searchFoods('banana')
-// //       .then(res => {
-// // //        console.log('6. Response -> POST /food -> searchFoods().then', res);
-// //         if (res.error) {
-// //           response.status(200).send(res);
-// //           return;
-// //         }
-
-// //         const genericFoods = res.foods.food.filter(food => food.food_type==='Generic');
-// // //        console.dir(genericFoods);
-
-// //         const genericFood = genericFoods[0];
-// //         let servingDetails;
-
-// //         searchFoodDetails(genericFood.food_id).
-// //         then(res => {
-// // //          console.log(res);
-// //           servingDetails = res.food.servings.serving
-// //           .filter(serving => serving.serving_description === '100 g' && serving.measurement_description === 'g');
-// //           console.log(servingDetails);
-
-// //           response.status(200).send({
-// //             "message": message,
-// //             "food_info": {
-// //               "summary": genericFood.food_description,
-// //               "details": servingDetails
-// //             }
-// //           });
-// //         })
-// //         .catch(err => console.error('Error -> POST /food -> searchFoodDetails().catch', err));
-// //       })
-// //       .catch(err => console.error('Error -> POST /food -> searchFoods().catch', err));
-
-//       if (!request.body) {
-//         return response.status(200).json({ error: 'No payload received!!!'})
-//       }
-
-//       if (!request.body.weight || !request.body.img_b64) {
-//         return response.status(200).json({ error: 'Payload MUST have weight and img_b64!!!'});
-//       }
-
-//       let imgLabels;
-//       let food;
-
-//       analyzeImageWithGoogle(request.body.img_b64)
-//       .then(resImg => {
-//         if (!resImg || !resImg.responses) {
-//           return response.status(400).json({ error: 'Could not detect image'});
-//         } else if (resImg.responses[0].error) {
-//           return response.status(400).json(resImg.responses[0].error);
-//         }
-
-//         imgLabels = resImg.responses[0].labelAnnotations.filter(label => label.description !== "Food");
-//         return searchFoods(imgLabels[0].description);
-//       })
-//       .then(resFoods => {
-//         if (!resFoods || !resFoods.foods || !resFoods.foods.food || resFoods.total_results == 0) {
-//           return response.status(404).send({ error: 'Could not find any info about the food'});
-//         }
-
-//         food = resFoods.foods.food.filter(food => food.food_type==='Generic')[0];
-//         return searchFoodDetails(food.food_id);
-//       })
-//       .then(resFoodDetails => {
-//         if (!resFoodDetails || !resFoodDetails.food || !resFoodDetails.food.servings || !resFoodDetails.food.servings.serving) {
-//           return response.status(404).send({ error: 'Could not find any detailed info about the food'});
-//         }
-
-//         const servingDetails = resFoodDetails.food.servings.serving
-//         .filter(serving => serving.serving_description === '100 g' && serving.measurement_description === 'g');
-
-//         return response.status(200).send({
-//           "message": 'weight was ' + request.body.weight,
-//           "imgLabels": imgLabels,
-//           "food_info": {
-//             "name": resFoodDetails.food.food_name,
-//             "summary": food.food_description,
-//             "details": servingDetails
-//           }
-//         });
-//       })
-//       .catch(err => {
-//         console.error('Error -> POST /food -> analyzeImageWithGoogle().then.then.then.catch', err);
-//         response.status(400).send(err);
-//       });
-
-//     });
-
-
-
-    app.post('/compare', (request, response) => {
-      // console.log(request);
-      if (!request.body) {
-        return response.status(400).json({ error: 'No payload received!!!'})
-      }
-
-      if (!request.files) {
-        return response.status(400).json({ error: 'No image received!!!'});
-      }
-
-      const imgFilePath = request.files[Object.keys(request.files)[0]].tempFilePath;
-      const azureRequest = analyzeImageWithAzure(imgFilePath, 'tag');
-      const googleRequest = analyzeImageWithGoogle(imgFilePath)
-
-      Promise.all([azureRequest, googleRequest])
-      .then((values) => {
-        // console.log(values);
-
-        if (values[0].tags || (values[1].responses && values[1].responses[0].labelAnnotations)) {
-          return response.json({
-            azure: values[0].tags,
-            google: values[1].responses[0].labelAnnotations
-          });
-        }
-        return response.status(200).json(values);
-      })
-      .catch(error => {
-        console.error('Error -> POST /compare -> Promise.all.catch', error);
-        return response.status(error.status || 500).json(error);
-      });
-
-      // analyzeImageWithAzure(imgFile.tempFilePath, 'tag')
-      // .then(result => {
-      //   return response.send(result);
-      // })
-      // .catch(error => {
-      //   console.error('Error -> POST /compare -> analyzeImageWithAzure().catch', error);
-      //   return response.status(error.status || 500).json(error);
-      // });
-    });
-
-
-
-    app.get('*', (req, res) => {
-      res.sendStatus(200);
-    });
-
-    // listen for requests :)
-    const listener = app.listen(process.env.PORT, () => {
-      // const currDate = new Date();
-      console.log(`[${new Date().toISOString()}] ` + "Your app is listening on port " + listener.address().port);
-    });
-  // })
-  // .catch(err => {
-  //   console.error(err);
-  // });
-
-/*
+});
+
+
+
+/**
+ * POST /food
+ *
+ * Takes the first image received in the request and analyses it using the Google Vision API
+ *
+ * After getting the image labels and filtering out irrelevant labels, use the first relevant
+ * label to search for foods in the FatSecret API
+ *
+ * The returned foods are filtered out (only generic foods), and details for the
+ * first food ID are fetched from FatSecret
+ *
  *
  */
+app.post('/food', (request, response) => {
+  // Make sure the request contains a valid payload
+  if (!request.body || !request.body.weight) {
+    return response.status(400).json({ error: 'Invalid or empty payload received!!!' })
+  }
+
+  // Make sure the request contains a file
+  if (!request.files) {
+    return response.status(400).json({ error: 'No image received!!!' });
+  }
+
+  // Get the first file in the request
+  const firstFileKey = Object.keys(request.files)[0];
+  const firstFile = Object.prototype.toString.call(request.files[firstFileKey]) === '[object Array]' ?
+    request.files[firstFileKey][0] : request.files[firstFileKey];
+  const imgFilePath = firstFile.tempFilePath;
+
+  let allImgLabels;
+  let filteredImgLabels;
+  let searchTerm;
+  let allFoods;
+  let food;
+
+  // Send the image to Google Vision API
+  analyzeImageWithGoogle(imgFilePath)
+    .then(resImg => {
+      if (!resImg || !resImg.responses) {
+        throw ({
+          error: 'Could not detect image',
+          status: 500,
+          labelsFound: resImg
+        });
+      } else if (resImg.responses[0].error) {
+        throw ({
+          error: resImg.responses[0].error,
+          status: 500,
+          labelsFound: resImg
+        });
+      }
+
+      // Filter the image labels
+      allImgLabels = resImg.responses[0].labelAnnotations;
+      filteredImgLabels = allImgLabels.filter(label => {
+        const regex = new RegExp(".*(food|fruit|plant)(s)*.*", "gi");
+        return !regex.test(label.description);
+      });
+
+      // Make sure at least one label remains after the filter
+      if (!filteredImgLabels.length) {
+        throw ({
+          error: 'Could not detect food from image',
+          status: 404,
+          labelsFound: allImgLabels
+        });
+      }
+
+      const selectedImgLabel = filteredImgLabels[0];
+      searchTerm = selectedImgLabel.description;
+
+      // Search for the image label in FatSecret API
+      return searchFoods(searchTerm);
+    })
+    .then(resFoods => {
+      if (resFoods.error) {
+        throw ({
+          error: resFoods.error,
+          status: 500
+        });
+      }
+
+      // Verify that the FatSecret API returned some results
+      if (!resFoods || !resFoods.foods || !resFoods.foods.food || resFoods.total_results == 0) {
+        throw ({
+          error: 'Could not find any info about the food',
+          status: 404,
+          labelsFound: allImgLabels,
+          infoFound: resFoods
+        });
+      }
+
+      // Filter out non-Generic (Branded) foods
+      allFoods = resFoods.foods.food;
+      food = resFoods.foods.food.filter(food => food.food_type === 'Generic')[0];
+
+      // Make sure at there are foods after filtering them
+      if (!food) {
+        throw ({
+          error: 'Could not find any info about the food',
+          status: 404,
+          labelsFound: allImgLabels,
+          infoFound: resFoods
+        });
+      }
+
+      // Search the food details using FatSecret API
+      return searchFoodDetails(food.food_id);
+    })
+    .then(resFoodDetails => {
+      const servingDetails = resFoodDetails.food.servings.serving
+        .filter(serving => serving.serving_description === '100 g' && serving.measurement_description === 'g');
+      const resp = {
+        "message": 'weight was ' + request.body.weight,
+        "searchTerm": searchTerm,
+        "food_info": {
+          "name": resFoodDetails.food.food_name,
+          "summary": food.food_description,
+          "details": servingDetails
+        },
+        "allImgLabels": allImgLabels,
+        "allFoods": allFoods
+      };
+
+      // Send the successful response
+      return response.status(200).send(resp);
+    })
+    .catch(err => {
+      console.error('Error -> POST /food -> analyzeImageWithGoogle().then.then.then.catch', err);
+      return response.status(err.status || 500).json(err);
+    });
+
+});
+
+
+
+/**
+ * POST /compare
+ *
+ * Sends an image analysis request to:
+ * - Google Vision API
+ * - Azure Computer Vision API
+ * - AWS Rekognition API
+ * - Clarifai API
+ *
+ * After all API responses are received, build a JSON object with the results for each API
+ */
+app.post('/compare', (request, response) => {
+  if (!request.body) {
+    return response.status(400).json({ error: 'No payload received!!!' })
+  }
+
+  if (!request.files) {
+    return response.status(400).json({ error: 'No image received!!!' });
+  }
+
+  const imgFilePath     = request.files[Object.keys(request.files)[0]].tempFilePath;
+  const awsRequest      = analyzeImageWithAWS(imgFilePath);
+  const azureRequest    = analyzeImageWithAzure(imgFilePath, 'tag');
+  const clarifaiRequest = analyzeImageWithClarifai(imgFilePath);
+  const googleRequest   = analyzeImageWithGoogle(imgFilePath)
+
+  Promise.all([awsRequest, azureRequest, clarifaiRequest, googleRequest])
+    .then((values) => {
+      const awsResp       = values[0];
+      const azureResp     = values[1];
+      const clarifaiResp  = values[2];
+      const googleResp    = values[3];
+
+      // console.log('AWS:', awsResp);
+      // console.log('Azure:', azureResp);
+      // console.log('Clarifai:', clarifaiResp);
+      // console.log('Google:', googleResp);
+
+      let awsLabels;
+      let azureTags;
+      let googleLabels;
+      let clarifaiConcepts;
+
+      // Check if AWS returned any labels
+      awsLabels = awsResp && awsResp.Labels
+
+      // Check if Azure returned any tags
+      azureTags = azureResp && azureResp.tags;
+
+      // Check if Clarifai returned any concepts
+      clarifaiConcepts = clarifaiResp && clarifaiResp.outputs && clarifaiResp.outputs[0] && clarifaiResp.outputs[0].data && clarifaiResp.outputs[0].data.concepts;
+
+      // Check if Google returned any labels
+      googleLabels = googleResp && googleResp.responses && googleResp.responses[0].labelAnnotations;
+
+      const resp = {
+        aws:      awsLabels,
+        azure:    azureTags,
+        clarifai: clarifaiConcepts,
+        google:   googleLabels
+      };
+
+      // console.log(resp);
+      return response.status(200).json(resp);
+    })
+    .catch(error => {
+      console.error('Error -> POST /compare -> Promise.all.catch', error);
+      return response.status(error.status || 500).json(error);
+    });
+});
+
+
+
+app.get('*', (req, res) => {
+  res.sendStatus(404);
+});
+
+// listen for requests :)
+const listener = app.listen(process.env.PORT, () => {
+  // const currDate = new Date();
+  console.log(`[${new Date().toISOString()}] ` + "Your app is listening on port " + listener.address().port);
+});
+
+
+
+/**
+ * Verify if the FatSecret Access Token has expired
+ *
+ * @returns true if the the FatSecret Access Token has expired
+ */
 function expiredFatSecretAccessToken() {
-  if (!fatSecret || !fatSecret.access_token) {
+  if (!fatSecretAccessToken) {
     return true;
   }
 
-  const created_tms = fatSecret.access_token.created_tms;
-  const expired_tms = new Date(Date.now() - fatSecret.access_token.expires_in*1000 )
+  const created_tms = fatSecretAccessToken.created_tms;
+  const expired_tms = new Date(Date.now() - fatSecretAccessToken.expires_in * 1000)
 
   return expired_tms > created_tms;
 }
@@ -611,68 +420,38 @@ function expiredFatSecretAccessToken() {
  * Get an Access Token from FatSecret
  **/
 async function getFatSecretAccessToken() {
-//  let url = `https://httpbin.org/basic-auth/${username}/${password}`
   let url = process.env.fatsecret_access_token_url;
-//  let url = 'https://pokeapi.co/api/v2/pokemon/1';
-//  let url = 'https://httpbin.org/post';
   let authString = `${process.env.fatsecret_user}:${process.env.fatsecret_pass}`
-//  let headers = new Headers();
-//  headers.set('Authorization', 'Basic ' + btoa(authString))
 
   const params = new URLSearchParams();
   params.append('grant_type', 'client_credentials');
   params.append('scope', 'basic');
 
   let options = {
-    method: 'post',
-    body:    params,
-//    headers: headers
-    headers: { 'Authorization': 'Basic ' + Buffer.from(authString).toString('base64') }
+    method:   'post',
+    body:     params,
+    headers:  { 'Authorization': 'Basic ' + Buffer.from(authString).toString('base64') }
   };
 
   console.log('Requesting a new FatSecret Access Token...');
-  const response = await fetch(url, options);
-  const data = await response.json();
-  fatSecret.access_token = {
-    value : data.access_token,
-    created_tms: new Date(),
-    expires_in: data.expires_in
+  const response  = await fetch(url, options);
+  const data      = await response.json();
+
+  fatSecretAccessToken = {
+    value:        data.access_token,
+    created_tms:  new Date(),
+    expires_in:   data.expires_in
   };
-
-//  return fetch(url, options)
-//  .then(res => {
-////    console.log('3. Response -> getFatSecretAccessToken() -> fetch().then');
-//    return res.json();
-//  })
-//  .catch(err => console.error('Error -> getFatSecretAccessToken() -> fetch().catch', err));
-
-//  fetch(url, options)
-//  .then((res) => {
-//    console.log (res);
-//    console.log(res.json());
-//    return res;
-//  })
-//  .catch(err => {
-//    console.error(err);
-//  });
 }
 
 /**
  * Get food search results from FatSecret
+ *
+ * @param {*} searchStr The string to use as a search term in the API
+ * @returns A Promise with the API call results
  */
 async function searchFoods(searchStr) {
   if (expiredFatSecretAccessToken()) {
-////    console.log('2. Requesting a new FatSecret Access Token...');
-//    await getFatSecretAccessToken()
-//    .then(data => {
-////      console.log('4. Response -> searchFoods() -> await getFatSecretAccessToken().then');
-//      fatSecret.access_token = {
-//        value : data.access_token,
-//        created_tms: new Date(),
-//        expires_in: data.expires_in
-//      };
-//    })
-//    .catch(err => console.error('Error -> searchFoods() -> await getFatSecretAccessToken().catch', err));
     await getFatSecretAccessToken();
   }
 
@@ -686,75 +465,78 @@ async function searchFoods(searchStr) {
   params.append('max_results', 5);
 
   let options = {
-    method: 'post',
-    body:    params,
-    headers: { 'Authorization': 'Bearer ' + fatSecret.access_token.value }
+    method:   'post',
+    body:     params,
+    headers:  { 'Authorization': 'Bearer ' + fatSecretAccessToken.value }
   };
 
   console.log(`Requesting search results for "${searchStr}" from FatSecret API...`);
   return fetch(url, options)
-  .then(res => {
-//    console.log('5. Response -> searchFoods() -> fetch().then');
-    if (!res.ok || res.error) { // same as res.status >= 200 && res.status < 300 according to: https://www.npmjs.com/package/node-fetch#handling-client-and-server-errors
-      console.log('Error -> searchFoods() -> fetch().then', res);
-      throw {
-        "error": res.error || '',
-        status: res.status,
-        statusText: res.statusText
-      };
-    }
-    return res.json();
-  })
-  .catch(err => {
-    console.error('Error -> searchFoods() -> fetch().catch', err);
-    throw err;
-  });
+    .then(res => {
+      //    console.log('5. Response -> searchFoods() -> fetch().then');
+      if (!res.ok || res.error) { // same as res.status >= 200 && res.status < 300 according to: https://www.npmjs.com/package/node-fetch#handling-client-and-server-errors
+        console.log('Error -> searchFoods() -> fetch().then', res);
+        throw {
+          "error":    res.error || '',
+          status:     res.status,
+          statusText: res.statusText
+        };
+      }
+      return res.json();
+    })
+    .catch(err => {
+      console.error('Error -> searchFoods() -> fetch().catch', err);
+      throw err;
+    });
 }
 
 /**
+ * Get the details of a specific food using FatSecret API
  *
+ * @param {*} foodId FatSecret food ID
+ * @returns A Promise with the results of the API call
  */
 async function searchFoodDetails(foodId) {
   if (expiredFatSecretAccessToken()) {
     await getFatSecretAccessToken();
   }
-
-  const params = new URLSearchParams();
+  const url     = process.env.fatsecret_api_url;
+  const params  = new URLSearchParams();
   params.append('method', 'food.get.v2');
   params.append('food_id', foodId);
   params.append('format', 'json');
 
   let options = {
-    method: 'post',
-    body:    params,
-    headers: { 'Authorization': 'Bearer ' + fatSecret.access_token.value }
+    method:   'post',
+    body:     params,
+    headers:  { 'Authorization': 'Bearer ' + fatSecretAccessToken.value }
   };
 
   console.log('Requesting FOOD DETAILS from FatSecret API...');
-  return fetch(process.env.fatsecret_api_url, options)
-  .then(res => {
-//    console.log('Response -> searchFoodDetails() -> fetch().then');
-    if (!res.ok || res.error) {
-      console.log('Error -> searchFoodDetails() -> fetch().then', res);
-      throw {
-        "error": res.error || '',
-        status: res.status,
-        statusText: res.statusText
-      };
-    }
-    return res.json();
-  })
-  .catch(err => {
-    console.error('Error -> searchFoodDetails() -> fetch().catch', err);
-    throw err;
-  });
+  return fetch(url, options)
+    .then(res => {
+      //    console.log('Response -> searchFoodDetails() -> fetch().then');
+      if (!res.ok || res.error) {
+        console.log('Error -> searchFoodDetails() -> fetch().then', res);
+        throw {
+          "error":    res.error || '',
+          status:     res.status,
+          statusText: res.statusText
+        };
+      }
+      return res.json();
+    })
+    .catch(err => {
+      console.error('Error -> searchFoodDetails() -> fetch().catch', err);
+      throw err;
+    });
 }
 
 /**
  * Use Google Vision API to get image labels (identify what is in the image)
  *
  * @param {*} imgFilePath path to the image file to send along with the request
- * @returns all the labels identified by Google's Vision API
+ * @returns A Promise with the reponse from the API call (all the labels identified by Google's Vision API)
  */
 async function analyzeImageWithGoogle(imgFilePath) {
   const url = process.env.google_vision_api_url + process.env.google_vision_api_key;
@@ -777,27 +559,27 @@ async function analyzeImageWithGoogle(imgFilePath) {
 
   const options = {
     method: 'POST',
-    body: JSON.stringify(payload) // JSON.stringify is a MUST, otherwise, Google Vision API returns 400 Bad Request
+    body:   JSON.stringify(payload) // JSON.stringify is a MUST, otherwise, Google Vision API returns 400 Bad Request
   };
 
   console.log('Requesting image analysis from Google\'s Vision API...');
   return fetch(url, options)
-  .then(res => {
-//    console.log('Response -> analyzeImageWithGoogle() -> fetch().then', res)
-    if (!res.ok || res.error) {
-      console.log('Error -> analyzeImageWithGoogle() -> fetch().then', res);
-      throw {
-        "error": res.error || '',
-        status: res.status,
-        statusText: res.statusText
-      };
-    }
-    return res.json();
-  })
-  .catch(err => {
-    console.error('Error ->analyzeImageWithGoogle() -> fetch().catch', err);
-    throw err;
-  });
+    .then(res => {
+      //    console.log('Response -> analyzeImageWithGoogle() -> fetch().then', res)
+      if (!res.ok || res.error) {
+        console.log('Error -> analyzeImageWithGoogle() -> fetch().then', res);
+        throw {
+          "error":    res.error || '',
+          status:     res.status,
+          statusText: res.statusText
+        };
+      }
+      return res.json();
+    })
+    .catch(err => {
+      console.error('Error ->analyzeImageWithGoogle() -> fetch().catch', err);
+      throw err;
+    });
 }
 
 /**
@@ -825,14 +607,14 @@ async function analyzeImageWithGoogleUsingLibrary(base64Img) {
  * @param {*} imgFilePath path to the image file to send along with the request
  * @returns all the tags identified by Azure's Computer Vision API
  */
-async function analyzeImageWithAzure (imgFilePath, endpoint) {
+async function analyzeImageWithAzure(imgFilePath, endpoint) {
   const endpoints = {
     analyze: {
-      url: '/analyze',
+      url:    '/analyze',
       params: '?visualFeatures=Adult,Brands,Categories,Color,Description,Faces,ImageType,Objects,Tags&details=Celebrities,Landmarks&language=[en|es|ja|pt|zh]'
     },
     describe: {
-      url: '/describe',
+      url:    '/describe',
       params: '?maxCandidates=12&language=[en|es|ja|pt|zh]'
     },
     detect: {
@@ -843,47 +625,281 @@ async function analyzeImageWithAzure (imgFilePath, endpoint) {
     ocr: {},
     read: {},
     tag: {
-      url: '/tag',
+      url:    '/tag',
       params: '?language=en'
     }
   };
 
   const headers = {
     content_type: {
-      json: 'application/json',
+      json:   'application/json',
       binary: 'application/octet-stream',
-      form: 'multipart/form-data'
+      form:   'multipart/form-data'
     }
   };
-
 
   const url = process.env.azure_computer_vision_api_url + endpoints[endpoint].url;
 
   const fetch_options = {
-    method: 'POST',
-    headers: {
-      'Content-Type': headers.content_type.binary,
-      'Content-Length': fs.statSync(imgFilePath).size,
-      'Ocp-Apim-Subscription-Key': process.env.azure_computer_vision_api_key
+    method:   'POST',
+    headers:  {
+      'Content-Type':               headers.content_type.binary,
+      'Content-Length':             fs.statSync(imgFilePath).size,
+      'Ocp-Apim-Subscription-Key':  process.env.azure_computer_vision_api_key
     },
     body: fs.readFileSync(imgFilePath)
   };
 
   console.log('Requesting image analysis from Azure\'s Computer Vision API...');
   return fetch(url, fetch_options)
-  .then(res => {
-    if (!res.ok || res.error) {
-      console.log('Error -> analyzeImageWithAzure() -> fetch().then', res);
-      throw {
-        "error": res.error || '',
-        status: res.status,
-        statusText: res.statusText
-      };
-    }
-    return res.json();
-  })
-  .catch(err => {
-    console.error('Error ->analyzeImageWithAzure() -> fetch().catch', err);
-    throw err;
+    .then(res => {
+      if (!res.ok || res.error) {
+        console.log('Error -> analyzeImageWithAzure() -> fetch().then', res);
+        throw {
+          "error":    res.error || '',
+          status:     res.status,
+          statusText: res.statusText
+        };
+      }
+      return res.json();
+    })
+    .catch(err => {
+      console.error('Error ->analyzeImageWithAzure() -> fetch().catch', err);
+      throw err;
+    });
+}
+
+/**
+ * Use Clarifai API to get image concepts (identify what is in the image)
+ *
+ * @param {*} imgFilePath path to the image file to send along with the request
+ * @returns all the concepts identified by Clarifai's API
+ */
+async function analyzeImageWithClarifai(imgFilePath) {
+  const modelId         = '9504135848be0dd2c39bdab0002f78e9'; // Food Model V2
+  const modelVersionId  = '1d5fd481e0cf4826aa72ec3ff049e044'; // Version 2020-10-16
+  const url             = process.env.clarifai_api_url + `/models/${modelId}/versions/${modelVersionId}/outputs`;
+
+  const payload = {
+    "inputs": [
+      {
+        "data": {
+          "image": {
+            "base64": fs.readFileSync(imgFilePath, { encoding: 'base64' })
+          }
+        }
+      }
+    ]
+  };
+
+  const options = {
+    method:   'POST',
+    headers:  { 'Authorization': `Key ${process.env.clarifai_api_key}` },
+    body:     JSON.stringify(payload)
+  };
+
+  console.log('Requesting image analysis from Clarifai\'s API...');
+  return fetch(url, options)
+    .then(res => {
+      //    console.log('Response -> analyzeImageWithClarifai() -> fetch().then', res)
+      if (!res.ok || res.error) {
+        console.log('Error -> analyzeImageWithClarifai() -> fetch().then', res);
+        throw {
+          "error":    res.error || '',
+          status:     res.status,
+          statusText: res.statusText
+        };
+      }
+      return res.json();
+    })
+    .catch(err => {
+      console.error('Error ->analyzeImageWithClarifai() -> fetch().catch', err);
+      throw err;
+    });
+}
+
+/**
+ * Use AWS Rekognition API to get image concepts (identify what is in the image)
+ *
+ * @param {*} imgFilePath path to the image file to send along with the request
+ * @returns all the concepts identified by AWS' Rekognition API
+ */
+async function analyzeImageWithAWS(imgFilePath) {
+  // // Example from Tasks 1-4 at https://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html
+  // const url            = 'https://iam.amazonaws.com/?Action=ListUsers&Version=2010-05-08';
+  // const tms            = '20150830T123600Z';
+  // const payload        = '';
+  // const hashedPayload  = crypto.createHash('sha256').update(payload).digest('hex');
+  // const options        = {
+  //   method: 'GET',
+  //   headers: {
+  //     'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
+  //     'X-Amz-Date': tms
+  //   },
+  // };
+  // const credentials            = { accessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY', secretKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY' };
+
+  const url     = process.env.aws_rekognition_api_url;
+  const tms     = new Date().toISOString().replace(/(\.[0-9]+|[-:])/g, '');
+  const payload = JSON.stringify({
+    "Image": {
+      "Bytes": fs.readFileSync(imgFilePath, { encoding: 'base64' })
+    },
+    "MaxLabels": 25
   });
+
+  const hashedPayload = crypto.createHash('sha256').update(payload).digest('hex');
+
+  const options = {
+    method: 'POST',
+    headers: {
+      'Content-Type':         'application/x-amz-json-1.1',
+      'X-Amz-Target':         'RekognitionService.DetectLabels',
+      'X-Amz-Date':           tms,
+      'X-Amz-Content-Sha256': hashedPayload
+    },
+    body: payload
+  };
+
+  const credentials = JSON.parse(process.env.aws_rekognition_api_credentials);
+
+  const requestParams = {
+    url:            url,
+    method:         options.method,
+    headers:        options.headers,
+    hashedPayload:  hashedPayload,
+    tms: tms
+  };
+
+  const awsParams = {
+    region:     'eu-central-1',
+    service:    'rekognition',
+    accessKey:  credentials.accessKey,
+    secretKey:  credentials.secretKey,
+  }
+
+  const authHeader = generateAuthorizationHeader(requestParams, awsParams);
+
+  options.headers['Authorization'] = authHeader;
+
+  console.log('Requesting image analysis from AWS\' API...');
+  return fetch(url, options)
+    .then(res => {
+      // console.log('Response -> analyzeImageWithAWS() -> fetch().then', res)
+      if (!res.ok || res.error) {
+        console.log('Error -> analyzeImageWithAWS() -> fetch().then', res);
+        throw {
+          "error":    res.error || '',
+          status:     res.status,
+          statusText: res.statusText
+        };
+      }
+      return res.json();
+    })
+    .catch(err => {
+      console.error('Error ->analyzeImageWithAWS() -> fetch().catch', err);
+      throw err;
+    });
+}
+
+/**
+ *
+ * @param {*} requestParams
+ * @returns
+ */
+function buildCanonicalRequestString(requestParams) {
+  // https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html#canonical-request
+  const urlRegExp             = /(?<scheme>https|http)?(:\/\/)?(?<host>[0-9a-zA-Z\-\.]+)(?<path>([0-9a-zA-Z\-\/\.]+))?(?<query>(\?)[0-9a-zA-Z=&\-]+)?/g;
+  const canonicalURI          = requestParams.url.replace(urlRegExp, '$<path>') || '/';
+  const canonicalQueryString  = requestParams.url.replace(urlRegExp, '$<query>').substring(1);
+
+  // Add the Host header
+  requestParams.headers['Host'] = requestParams.url.replace(urlRegExp, '$<host>');
+
+  let canonicalHeaders  = '';
+  let signedHeaders     = '';
+
+  // TODO: headers should be sorted after they are all lowercase
+  // Sort headers alfabetically
+  Object.keys(requestParams.headers).sort().forEach(header => {
+    canonicalHeaders  += header.toLowerCase() + ':' + requestParams.headers[header] + '\n';
+    signedHeaders     += ';' + header.toLowerCase();
+  });
+  // canonicalHeaders = canonicalHeaders.trim();
+  signedHeaders = signedHeaders.substring(1);
+
+  // Build the Canonical Request
+  const canonicalRequestString =  requestParams.method          + '\n' +
+                                  canonicalURI                  + '\n' +
+                                  canonicalQueryString          + '\n' +
+                                  canonicalHeaders              + '\n' +
+                                  signedHeaders                 + '\n' +
+                                  requestParams.hashedPayload;
+
+  return canonicalRequestString;
+}
+
+/**
+ * Creates the required Authorization header used by AWS
+ *
+ * @param {*} requestParams
+ * @param {*} awsParams
+ * @returns
+ */
+function generateAuthorizationHeader(requestParams, awsParams) {
+  const canonicalRequestString  = buildCanonicalRequestString(requestParams);
+  const canonicalRequestArray   = canonicalRequestString.split('\n');
+  const signedHeaders           = canonicalRequestArray[canonicalRequestArray.length - 2];
+  const hashedCanonicalRequest  = crypto.createHash('sha256').update(canonicalRequestString).digest('hex');
+
+  // https://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
+  const shortDate     = requestParams.tms.substring(0, 8);
+  const authAlgorithm = 'AWS4-HMAC-SHA256';
+  const authScope     = shortDate + '/' + awsParams.region + '/' + awsParams.service + '/aws4_request';
+
+  const strToSign = authAlgorithm           + '\n' +
+                    requestParams.tms       + '\n' +
+                    authScope               + '\n' +
+                    hashedCanonicalRequest;
+
+  const DateKey               = hmacSha256('AWS4' + awsParams.secretKey, shortDate);
+  const DateRegionKey         = hmacSha256(DateKey, awsParams.region);
+  const DateRegionServiceKey  = hmacSha256(DateRegionKey, awsParams.service);
+  const SigningKey            = hmacSha256(DateRegionServiceKey, 'aws4_request');
+
+  // Setting the encoding to something other than empty string ('') or null,
+  // will create a double conversion (from Buffer to string and again from string to Buffer)
+  // in the hmacSha256 function
+  // const encoding   = 'latin1' // https://nodejs.org/api/buffer.html#buffer_buffers_and_character_encodings
+  // const SigningKey = hmacSha256(
+  //   hmacSha256(
+  //     hmacSha256(
+  //       hmacSha256('AWS4' + awsParams.secretKey, shortDate, encoding),
+  //       awsParams.region, encoding),
+  //     awsParams.service, encoding),
+  //   'aws4_request', encoding
+  // );
+
+  const signature   = hmacSha256(SigningKey, strToSign).toString('hex');
+  const authHeader  = authAlgorithm + ' Credential=' + awsParams.accessKey + '/' + authScope + ',SignedHeaders=' + signedHeaders + ',Signature=' + signature;
+
+  return authHeader;
+}
+
+/**
+ *
+ * @param {*} signingKey
+ * @param {*} strToSign
+ * @param {*} encoding
+ * @returns
+ */
+function hmacSha256(signingKey, strToSign, encoding) {
+  // According to https://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
+  // The HMAC SHA256 function should use a digest (hash in binary format), and not a hexdigest (hash in hex format)
+  // Looking at https://nodejs.org/api/crypto.html#crypto_hmac_digest_encoding
+  // If encoding is provided a string is returned; otherwise a [Buffer/binary string](https://nodejs.org/api/buffer.html) is returned;
+  // https://nodejs.org/api/buffer.html#buffer_buffers_and_character_encodings
+  const hash = crypto.createHmac('sha256', signingKey).update(strToSign).digest(encoding);
+
+  return encoding ? Buffer.from(hash, encoding) : hash;
 }
