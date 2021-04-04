@@ -66,7 +66,9 @@ app.use(fileupload({
     fileSize: 25 * 1024 * 1024
   },
   useTempFiles: true,
-  tempFileDir: tmpdir
+  tempFileDir: tmpdir,
+  safeFileNames: true,
+  preserveExtension: true
 }));
 
 
