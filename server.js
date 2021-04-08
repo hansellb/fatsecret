@@ -408,7 +408,7 @@ const listener = app.listen(process.env.PORT, () => {
  * @returns true if the the FatSecret Access Token has expired
  */
 function expiredFatSecretAccessToken() {
-  if (!fatSecretAccessToken) {
+  if (!fatSecretAccessToken || !fatSecretAccessToken.created_tms) {
     return true;
   }
 

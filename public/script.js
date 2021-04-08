@@ -16,10 +16,28 @@ function loadImages(event, element) {
 
     imgsHTML = '';
     imgs.forEach(img => {
-      imgsHTML += '<div class="img-container" onclick="deleteImage(\'' + img + '\', this)"><div class="delete-overlay">Click to delete</div><img src="' + img + '"></div>'
+      imgsHTML += '<div class="img-container" draggable="true" onclick="deleteImage(\'' + img + '\', this)"><div class="delete-overlay">Click to delete</div><img src="' + img + '"></div>'
     });
 
     imgContainer.innerHTML = imgsHTML;
+
+    const imgContainers = document.querySelectorAll('div.img-container');
+    // Iterating over a [NodeList](https://developer.mozilla.org/en-US/docs/Web/API/NodeList) correctly,
+    // requires the use of for...of of Array.prototype.forEach
+    for(let imgContainer of imgContainers) {
+      // https://developer.mozilla.org/en-US/docs/Web/API/HTML_Drag_and_Drop_API/Drag_operations#dragstart
+      imgContainer.addEventListener('dragstart', (event) => {
+        // console.log('dragstart', event);
+      })
+      imgContainer.addEventListener('dragend', function(event) {
+        // console.log('dragend', event);
+      });
+    }
+
+    // Array.prototype.forEach.call(imgContainers, function(imgContainer) {
+    //   console.log(imgContainer);
+    // });
+
   })
   .catch(err => {
     handleAxiosErrors(err);
@@ -159,5 +177,24 @@ function handleAxiosErrors(err) {
 }
 
 window.onload = function () {
+  const imgComp = document.getElementById('img-upload-compare');
+  const imgCompInput = imgComp.querySelector('input');
+
+  // https://developer.mozilla.org/en-US/docs/Web/API/HTML_Drag_and_Drop_API/Drag_operations#droptargets
+  imgCompInput.addEventListener('dragenter', (event) => {
+    // console.log('dragenter', event);
+    event.dataTransfer.types
+    event.preventDefault();
+  });
+  imgCompInput.addEventListener('dragover', (event) => {
+    // console.log('dragover', event);
+    // console.log(event.dataTransfer);
+    event.dataTransfer.types
+    event.preventDefault();
+  });
+  imgCompInput.addEventListener('drop', (event) => {
+    console.log('Something was dropped -> ', event);
+    console.log(event.dataTransfer.types);
+  });
   loadImages();
 }
