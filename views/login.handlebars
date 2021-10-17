@@ -1,0 +1,66 @@
+<div class="jumbotron">
+  <h1>Sign in</h1>
+  <p>We're using passport.js to demonstrate user authentication. Please log-in with your Local, Twitter, Google, or Facebook account to view your profile.</p>
+  <p>
+    <a data-toggle="collapse" href="#local" class="btn btn-warning btn-lg" role="button"><span class="glyphicon glyphicon-user"></span> Sign in Locally</a>
+    <a href="/auth/twitter" class="btn btn-info btn-lg" role="button"><span class="glyphicon glyphicon-user"></span> Sign in with Twitter</a>
+    <a href="/auth/google" class="btn btn-danger btn-lg" role="button"><span class="glyphicon glyphicon-user"></span> Sign in with Google</a>
+    <a href="/auth/facebook" class="btn btn-primary btn-lg" role="button"><span class="glyphicon glyphicon-user"></span> Sign in with Facebook</a>
+  </p>
+
+  <div id="login-btn" class="collapse">
+    <span data-toggle="collapse" href="#login-btn">
+      <span data-toggle="collapse" href="#login">
+        <span data-toggle="collapse" href="#signup-btn">
+          <a data-toggle="collapse" href="#signup" class="btn btn-default btn-md" role="button">I already have an account</a>
+        </span>
+      </span>
+    </span>
+  </div>
+  <div id="signup-btn" class="collapse in">
+    <span data-toggle="collapse" href="#signup-btn">
+      <span data-toggle="collapse" href="#signup">
+        <span data-toggle="collapse" href="#login-btn">
+          <a data-toggle="collapse" href="#login" class="btn btn-default btn-md" role="button">I need to make an account</a>
+        </span>
+      </span>
+    </span>
+  </div>
+
+  <form id="login" class="collapse in" action="/login" method="post">
+    <div>
+        <p></p>
+        <label>Username:</label>
+        <input type="text" name="email"/>
+    </div>
+    <div>
+        <label>Password:</label>
+        <input type="password" name="pass"/>
+    </div>
+    <div>
+        <input type="submit" class="btn btn-primary btn-sm" value="Log In"/>
+    </div>
+  </form>
+
+  <form id="signup" class="collapse" action="/signup" method="post">
+    <div>
+        <p></p>
+        <label>New Username:</label>
+        <input type="text" name="username"/>
+    </div>
+    <div>
+        <label>New Password:</label>
+        <input type="password" name="password"/>
+    </div>
+    <input type="hidden" name="newUser" value="true"/>
+    <div>
+        <input type="submit" class="btn btn-primary btn-sm" value="Register"/>
+    </div>
+  </form>
+
+  {{#if messages}}
+    {{#if messages.error}}
+  <div class="alert alert-danger">{{messages.error}}</div>
+    {{/if}}
+  {{/if}}
+</div>

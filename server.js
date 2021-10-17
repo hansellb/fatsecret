@@ -1,25 +1,32 @@
 require('dotenv').config();
+const db                  = require('./utils/db');
+const bodyParsers         = require('body-parser');
+const cookieParser        = require('cookie-parser');
 const cors                = require('cors');
 const crypto              = require('crypto');
-const express             = require("express");
-const mongoClient         = require('mongodb').MongoClient;
-const objectId            = require('mongodb').ObjectId;
+const flash               = require('connect-flash');
+const express             = require('express');
+const exprshndlbrs        = require('express-handlebars');
+const exprssession        = require('express-session');
+const methodOverride      = require('method-override');
 const fetch               = require('node-fetch');
 const fileupload          = require('express-fileupload');
 const fs                  = require('fs');
 const morgan              = require('morgan');
 const os                  = require('os');
+const passport            = require('passport');
 const path                = require('path');
+const routerIndex         = require('./routes/index');
+const routerLogin         = require('./routes/login');
+const routerLogout        = require('./routes/logout');
+const routerSignup        = require('./routes/signup');
+const routerSmarty        = require('./routes/smarty');
+const routerUser          = require('./routes/user');
 const swaggerUi           = require('swagger-ui-express');
 const { URLSearchParams } = require('url');
 const yaml                = require('js-yaml');
 
 const app = express();
-
-const mongo_conn_str  = `mongodb+srv://${process.env.mongodb_user}:${process.env.mongodb_pass}@cluster0.xu9wm.mongodb.net/test?retryWrites=true&w=majority`;
-const mongo_opts      = {
-  useUnifiedTopology: true // Removes "DeprecationWarning: current Server Discovery and Monitoring..."
-};
 
 // Holds the most recently generated access token to use FatSecret API
 let fatSecretAccessToken = {};
@@ -71,14 +78,54 @@ app.use(fileupload({
   preserveExtension: true
 }));
 
+// View engine setup Handlebars - https://www.npmjs.com/package/express-handlebars
+const hndlbrs = exprshndlbrs.create({
+  defaultLayout: 'main'
+});
+app.engine('handlebars', hndlbrs.engine);
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'handlebars');
 
+//
+app.use(methodOverride('X-HTTP-Method-Override'));
+app.use(cookieParser());
+app.use(exprssession({
+  cookie: { maxAge: 5000 },
+  name: 'smarty',
+  resave: false,
+  saveUninitialized: false,
+  secret: process.env.cookie_secret
+}));
+// app.use(require('express-session')({ name: 'smarty', resave: false, saveUninitialized: false, secret: process.env.cookie_secret }));
 
-// https://expressjs.com/en/starter/basic-routing.html
-app.get("/", (request, response) => {
-  response.sendFile(__dirname + "/views/index.html");
+// Setup connect-flash making messages available to templates through res.locals
+app.use(flash());
+app.use(function(req, res, next) {
+  // console.log('\n*************** req.session ***************\n', req.session);
+  // console.log('\n*******************************************\n');
+  // console.dir(req.flash);
+  var msgs = req.session.messages || [];
+  res.locals.messages = { ...req.flash(), ...msgs };
+  // res.locals.hasMessages = !! msgs.length;
+  // req.session.messages = [];
+  // console.log(res.locals);
+  next();
 });
 
+// Passport setup
+require('./utils/auth.js')();
+app.use(passport.initialize());
+app.use(passport.session());
 
+
+// Routes setup
+// https://expressjs.com/en/starter/basic-routing.html
+app.use('/', routerIndex);
+app.use('/login', routerLogin);
+app.use('/logout', routerLogout);
+app.use('/signup', routerSignup);
+app.use('/smarty', routerSmarty);
+app.use('/user', routerUser);
 
 /**
  * GET /img
@@ -394,11 +441,15 @@ app.get('*', (req, res) => {
   res.sendStatus(404);
 });
 
-// listen for requests :)
-const listener = app.listen(process.env.PORT, () => {
-  // const currDate = new Date();
-  console.log(`[${new Date().toISOString()}] ` + "Your app is listening on port " + listener.address().port);
+// Listen for requests AFTER a successful connection to the DB
+db.init().then(() => {
+  const listener = app.listen(process.env.PORT, () => {
+    // const currDate = new Date();
+    console.log(`[${new Date().toISOString()}] ` + "Your app is listening on port " + listener.address().port);
+  });
 });
+
+
 
 
 
