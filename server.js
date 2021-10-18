@@ -117,7 +117,7 @@ app.use(passport.session());
 app.use((req, res, next) => {
   // isAuthenticated is added by Passport.js, therefore, this middleware MUST
   // be added AFTER passport.session
-  res.locals.isUserAuthenticated = req.isAuthenticated();
+  res.locals.user = req.isAuthenticated() ? req.user : null;
   next();
 });
 

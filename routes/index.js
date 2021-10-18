@@ -3,6 +3,10 @@ const router  = express.Router();
 
 const auth    = require('./auth');
 const pages   = require('./pages');
+const smarty  = require('./smarty');
+const users   = require('./users');
+
+const { requireLogin } = require('../middleware/auth');
 
 /**
  * Pages endpoints
@@ -10,6 +14,13 @@ const pages   = require('./pages');
 
 router
   .get('/', pages.home);
+
+/**
+ * Users endpoints
+ */
+router
+  .get('/users', requireLogin, users.home)
+  .get('/users/profile', requireLogin, users.profile);;
 
 /**
  * Authenticatoin endpoints
@@ -20,5 +31,10 @@ router
   .get('/signup', auth.signupPage)
   .post('/signup', auth.signupAuth);
 
+/**
+ * Smarty endpoints
+ */
+router
+  .get('/smarty', smarty.home);
 
 module.exports = router;

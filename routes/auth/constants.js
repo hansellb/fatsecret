@@ -1,4 +1,10 @@
-module.exports = {
+let authConstants = module.exports = {};
+
+authConstants.bcrypt = {
+  saltRounds: 10
+};
+
+authConstants.msgs = {
   login: {
     invalidCredentials: {
       message: 'Invalid Credentials',

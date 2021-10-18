@@ -4,6 +4,9 @@ const loginPage = (req, res, next) => {
   res.render('auth/login');
 }
 
+/**
+ * Authenticate user using Passport.js Local Strategy - https://github.com/jaredhanson/passport-local
+ */
 const loginAuth = passport.authenticate('local-login', {
   // failureFlash: {
   //   type: 'messageFailure',
@@ -25,7 +28,12 @@ const loginAuth = passport.authenticate('local-login', {
   failureRedirect: '/login',
   successFlash: true, // { message: 'Successfully logged in.', type: 'messageSuccess'}
   successRedirect: '/',
-});
+}//, (err, user, info) => {
+//   // Passport.js Authenticate Custom Callback - http://www.passportjs.org/docs/authenticate/
+//   console.log('\n*************** err, user, info ***************\n', err, user, info);
+//   console.log('\n*******************************************\n');
+// }
+);
 
 module.exports = {
   loginAuth,

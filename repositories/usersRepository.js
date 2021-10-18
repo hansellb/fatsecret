@@ -8,9 +8,9 @@ const UserRepository = {
     property = property === 'id' ? '_id' : property;
     return Users.find({ [property]: value });
   },
-  getOneBy: (property, value) => {
+  getOneBy: (property, value, options = {}) => {
     property = property === 'id' ? '_id' : property;
-    return Users.findOne({ [property]: value });
+    return Users.findOne({ [property]: value }, options);
   },
   add: (user) => {
     return Users.insertOne(user);

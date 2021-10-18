@@ -1,8 +1,11 @@
 const bcrypt = require('bcrypt');
 const passport = require('passport');
 const LocalStrategy = require('passport-local');
-const UsersRepository = require('../../repositories/userRepository');
-const authMsgs = require('./authMsgs');
+const UsersRepository = require('../../repositories/usersRepository');
+
+// Extract the "msgs" prop and assign it to the "authMsgs" const
+// Extract the "saltRounds" prop (nested in the "bcrypt" prop), and assign it to the "rounds" const
+const { msgs: authMsgs, bcrypt: { saltRounds: rounds } } = require('./constants');
 
 // From http://www.passportjs.org/docs/configure/
 // The verify callback's job is to find a user with the provided credentials
@@ -24,6 +27,7 @@ passport.use('local-login', new LocalStrategy({
   // const cursor = UsersRepository.get({ username: { $eq: username } });
   // const cursor = UsersRepository.getBy('username', { $eq: username });
   // const user = await cursor.next();
+  // Find the username in the DB
   const user = await UsersRepository.getOneBy('username', username)
 
   if (!user) {
@@ -38,26 +42,6 @@ passport.use('local-login', new LocalStrategy({
         done(null, user, authMsgs.login.success) :
         done(null, false, authMsgs.login.invalidCredentials);
     });
-
-  // // Find the username
-  // Users.findOne({ username: username })
-  //   .then(async user => {
-  //     // If request is for login, check if user was found
-  //     if (!user) {
-  //       return done(null, false, { message: 'Invalid credentials' });
-  //     }
-
-  //     // Compare the provided password with the hash found in the DB
-  //     bcrypt.compare(password, user.password)
-  //       .then(hashesEqual => {
-  //           if (!hashesEqual) {
-  //           return done(null, false, { message: 'Invalid credentials' });
-  //         }
-
-  //         return done(null, user, { message: 'Login successful!!!' });
-  //       });
-  //   })
-  //   .catch(err => done(err));
 }));
 
 passport.use('local-signup', new LocalStrategy({
@@ -73,13 +57,13 @@ passport.use('local-signup', new LocalStrategy({
     }
 
     // Hash new user's password and add user to DB
-    bcrypt.hash(password, saltRounds)
+    bcrypt.hash(password, rounds)
       .then(hash => {
         UsersRepository.add({ username: username, password: hash })
           .then(result => {
             if (result.ok === 1 || result.insertedCount === 1) {
               console.log(`User ${result.ops[0].username} with id ${result.insertedId} added successfully!!!`);
-              return done(null, user, authMsgs.signup.success);
+              return done(null, result.ops[0], authMsgs.signup.success);
             }
 
             return done(null, false, authMsgs.signup.createError);
