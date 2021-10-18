@@ -1,7 +1,7 @@
 require('dotenv').config();
-const db                  = require('./utils/db');
-const bodyParsers         = require('body-parser');
-const cookieParser        = require('cookie-parser');
+const db                  = require('./db/mongodb');
+// const bodyParsers         = require('body-parser');
+// const cookieParser        = require('cookie-parser');
 const cors                = require('cors');
 const crypto              = require('crypto');
 const flash               = require('connect-flash');
@@ -16,12 +16,12 @@ const morgan              = require('morgan');
 const os                  = require('os');
 const passport            = require('passport');
 const path                = require('path');
-const routerIndex         = require('./routes/index');
-const routerLogin         = require('./routes/login');
-const routerLogout        = require('./routes/logout');
-const routerSignup        = require('./routes/signup');
-const routerSmarty        = require('./routes/smarty');
-const routerUser          = require('./routes/user');
+// const routerIndex         = require('./routes/index');
+// const routerLogin         = require('./routes/login');
+// const routerLogout        = require('./routes/logout');
+// const routerSignup        = require('./routes/signup');
+// const routerSmarty        = require('./routes/smarty');
+// const routerUser          = require('./routes/user');
 const swaggerUi           = require('swagger-ui-express');
 const { URLSearchParams } = require('url');
 const yaml                = require('js-yaml');
@@ -30,9 +30,29 @@ const app = express();
 
 // Holds the most recently generated access token to use FatSecret API
 let fatSecretAccessToken = {};
+
+// View engine setup Handlebars - https://www.npmjs.com/package/express-handlebars
+const hndlbrs = exprshndlbrs.create({
+  defaultLayout: 'main'
+});
+app.engine('.hbs', exprshndlbrs({ extname: '.hbs' }));
+//app.set('views', path.join(__dirname, 'views')); // This is the default
+app.set('view engine', '.hbs');
+
+// Create the swagger docs https://swagger.io/docs/specification/basic-structure/
+const swaggerDoc = yaml.load(fs.readFileSync('swagger.yml', 'utf8'));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
+
+// Setup Morgan logger - https://expressjs.com/en/resources/middleware/morgan.html
+app.use(morgan('common', {
+  immediate: false // Write log line on request instead of response. This means that a requests will be logged even if the server crashes, but data from the response (like the response code, content length, etc.) cannot be logged.
+}));
+
+// Make all files in the "public" directory (in the same level as this file) available as static files at the "/" url
+app.use(express.static('public'));
+
+// Create tmp dir to hold smarty images
 const tmpdir  = path.join(os.tmpdir(), 'smarty');
-
-
 const tmpdirCreated = fs.mkdirSync(tmpdir, { recursive: true });
 if (!tmpdirCreated) {
   const tmpdirExists = fs.statSync(tmpdir);
@@ -44,28 +64,13 @@ if (!tmpdirCreated) {
   console.log('tmpdir created!!! -> mkdir: ', tmpdirCreated);
 }
 
-const swaggerDoc = yaml.load(fs.readFileSync('swagger.yml', 'utf8'));
-
-// Setup Morgan logger
-app.use(morgan('common'));
-
-// Create the swagger docs https://swagger.io/docs/specification/basic-structure/
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
-
-// Make all files in the "public" directory (in the same level as this file) available as static files at the "/" url
-app.use(express.static('public'));
-
 // Make all files in the ${tmpdir} directory available as static files at the "/" url
 app.use(express.static(tmpdir));
 
-// Extract a JSON object from the request body
-app.use(express.json());
-
-// Extract query parameters from the request URL
-app.use(express.urlencoded({ extended: true }));
-
-//
-app.use(express.raw());
+// Parse request body and URL and extract JSON object and query parameters
+app.use(express.json()); // Extract a JSON object
+app.use(express.urlencoded({ extended: true })); // Extract query parameters
+app.use(express.raw()); // Extract raw
 
 // Extract files from the request
 app.use(fileupload({
@@ -78,19 +83,22 @@ app.use(fileupload({
   preserveExtension: true
 }));
 
-// View engine setup Handlebars - https://www.npmjs.com/package/express-handlebars
-const hndlbrs = exprshndlbrs.create({
-  defaultLayout: 'main'
-});
-app.engine('handlebars', hndlbrs.engine);
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'handlebars');
+
 
 //
 app.use(methodOverride('X-HTTP-Method-Override'));
-app.use(cookieParser());
+// From https://www.npmjs.com/package/express-session, since version 1.5.0, cookie-parser middleware is no longer needed.
+// However, from https://www.npmjs.com/package/cookie-parser, signed cookies are not parsed if no secret is specified
+// If cookie-parser and express-session are used together, both need to have the same secret.
+// app.use(cookieParser());
+// app.use(cookieParser(secret, options)); // Using cookie-parser with secret(string or array)
 app.use(exprssession({
-  cookie: { maxAge: 5000 },
+  cookie: {
+    httpOnly: true,
+    maxAge: 60000,
+    path: '/',
+    secure: false
+  },
   name: 'smarty',
   resave: false,
   saveUninitialized: false,
@@ -98,34 +106,63 @@ app.use(exprssession({
 }));
 // app.use(require('express-session')({ name: 'smarty', resave: false, saveUninitialized: false, secret: process.env.cookie_secret }));
 
-// Setup connect-flash making messages available to templates through res.locals
+// Setup connect-flash BEFORE passport.initialize (Passport.js uses connect-flash)
 app.use(flash());
+
+// Passport setup
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Make the authenticated user object available in views
+app.use((req, res, next) => {
+  // isAuthenticated is added by Passport.js, therefore, this middleware MUST
+  // be added AFTER passport.session
+  res.locals.isUserAuthenticated = req.isAuthenticated();
+  next();
+});
+
+// Make connect-flash messages available to templates through res.locals
 app.use(function(req, res, next) {
   // console.log('\n*************** req.session ***************\n', req.session);
   // console.log('\n*******************************************\n');
   // console.dir(req.flash);
   var msgs = req.session.messages || [];
-  res.locals.messages = { ...req.flash(), ...msgs };
+  res.locals.messages = { test: 'test msg', ...msgs };
+
+  // Get ALL connect-flash messages
+  res.locals = { ...res.locals, ...req.flash() }
+
+  // // Get specific connect-flash messages
+  // res.locals.messageFailure = req.flash('messageFailure');
+  // res.locals.messageSuccess = req.flash('messageSuccess');
+
   // res.locals.hasMessages = !! msgs.length;
   // req.session.messages = [];
-  // console.log(res.locals);
+  console.log('\n*************** res.locals* ***************\n', res.locals);
+  console.log('\n*******************************************\n');
   next();
 });
 
-// Passport setup
-require('./utils/auth.js')();
-app.use(passport.initialize());
-app.use(passport.session());
 
 
-// Routes setup
-// https://expressjs.com/en/starter/basic-routing.html
-app.use('/', routerIndex);
-app.use('/login', routerLogin);
-app.use('/logout', routerLogout);
-app.use('/signup', routerSignup);
-app.use('/smarty', routerSmarty);
-app.use('/user', routerUser);
+// Listen for requests AFTER a successful connection to the DB
+db.init().then(() => {
+  // Routes setup
+  // https://expressjs.com/en/starter/basic-routing.html
+  app.use(require('./routes'));
+
+  // Catch ALL - Should be the LAST route, otherwise, it will take precedence
+  app.get('*', (req, res) => {
+    res.sendStatus(404);
+  });
+
+  const listener = app.listen(process.env.PORT, () => {
+    // const currDate = new Date();
+    console.log(`[${new Date().toISOString()}] ` + "Your app is listening on port " + listener.address().port);
+  });
+});
+
+
 
 /**
  * GET /img
@@ -433,20 +470,6 @@ app.post('/compare', (request, response) => {
       console.error('Error -> POST /compare -> Promise.all.catch', error);
       return response.status(error.status || 500).json(error);
     });
-});
-
-
-
-app.get('*', (req, res) => {
-  res.sendStatus(404);
-});
-
-// Listen for requests AFTER a successful connection to the DB
-db.init().then(() => {
-  const listener = app.listen(process.env.PORT, () => {
-    // const currDate = new Date();
-    console.log(`[${new Date().toISOString()}] ` + "Your app is listening on port " + listener.address().port);
-  });
 });
 
 

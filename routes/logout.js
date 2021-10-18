@@ -8,11 +8,12 @@ const router    = express.Router();
  * Logout users, delete their session and return to homepage
  */
 router.get('/', function(req, res){
-  var name = req.user.username;
-  console.log("LOGGIN OUT " + req.user.username)
   req.logout();
   res.redirect('/');
-  req.session.notice = "You have successfully been logged out " + name + "!";
+  if (req.user) {
+    const name = req.user.username;
+    req.session.notice = "You have successfully been logged out " + name + "!";
+  }
 });
 
 module.exports = router;

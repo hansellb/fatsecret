@@ -7,7 +7,7 @@ const router    = express.Router();
  *
  * Display Home page
  */
-router.get("/", (request, response) => {
+router.get("/", passport.authenticate('session'), (request, response) => {
   response.render('user', { user: request.user });
 });
 

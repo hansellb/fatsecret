@@ -1,3 +1,4 @@
+const bcrypt                  = require('bcrypt');
 const db                      = require('./db.js');
 const objectId                = require('mongodb').ObjectId;
 const passport                = require('passport');
@@ -6,6 +7,7 @@ const passprtGoogleStrategy   = require('passport-google');
 const passprtLocalStrategy    = require('passport-local');
 const passprtTwitterStrategy  = require('passport-twitter');
 
+const saltRounds = 10;
 
 
 
@@ -30,32 +32,63 @@ module.exports = function() {
   function(request, username, password, done) { // Verify callback
     const Users = db.instance.collection('users');
 
-    Users.findOne({ email: username })
-      .then(user => {
-        if (!user) {
-          // Add 'flash: { error: [ 'invalid credentials' ] }' to req.session
-          // return done(null, false, request.flash('message', 'invalid credentials'));
-          console.log(request.body);
-          if (request.body.hasOwnProperty('newUser') || request.body.newUser) {
-            console.log(request.body);
+    // Find the username
+    Users.findOne({ username: username })
+      .then(async user => {
+        // Check if request is to signup a new user
+        if (request.body.hasOwnProperty('newUser') || request.body.newUser) {
+          if (user) {
+            return done(null, false, { message: 'Username already exists' });
           }
 
-          return done(null, false, { message: 'invalid credentials' });
+          // Hash new user's password and add user to DB
+          bcrypt.hash(password, saltRounds)
+            .then(hash => {
+              Users.insertOne({ username: username, password: hash })
+                .then(result => {
+                  if (result.ok === 1 || result.insertedCount === 1) {
+                    console.log(`User ${result.ops[0].username} with id ${result.insertedId} added successfully!!!`);
+                    return done(null, user, { message: 'Sign up successful!!!' });
+                  }
+
+                  return done(null, false, { message: 'Could not create user' });
+                })
+                .catch(err => console.error(err));
+            });
+        } else {
+          // If request is for login, check if user was found
+          if (!user) {
+            return done(null, false, { message: 'Invalid credentials' });
+          }
+
+          // Compare the provided password with the hash found in the DB
+          bcrypt.compare(password, user.password)
+            .then(hashesEqual => {
+               if (!hashesEqual) {
+                return done(null, false, { message: 'Invalid credentials' });
+              }
+
+              return done(null, user, { message: 'Login successful!!!' });
+            });
         }
-        return done(null, user, { message: 'Login successful' });
       })
       .catch(err => done(err));
   }));
 
   passport.serializeUser((user, done) => {
-    console.log('\n*************** serializeUser user ***************\n', user);
-    console.log('\n*******************************************\n');
-    process.nextTick(() => done(null, { id: user.id, username: user.email }));
+    // console.log('\n*************** serializeUser user ***************\n', user);
+    // console.log('\n*******************************************\n');
+    process.nextTick(() =>
+      done(null, {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      }));
   });
 
   passport.deserializeUser((user, callback) => {
-    console.log('\n*************** deserializeUser user ***************\n', user);
-    console.log('\n*******************************************\n');
+    // console.log('\n*************** deserializeUser user ***************\n', user);
+    // console.log('\n*******************************************\n');
     process.nextTick(() => callback(null, user));
   });
 }
