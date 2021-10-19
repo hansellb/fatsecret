@@ -1,12 +1,14 @@
 require('./passport_strategies');
 require('./passport_serializer');
-const { loginAuth, loginPage } = require('./login');
+const { login, loginPage } = require('./login');
+const logout = require('./logout');
 const signup = require('./signup');
 //import { signupPage, signupAuth } from './signup'; // Cannot use import statement outside a module
 
 module.exports = {
-  loginAuth: loginAuth,
+  login: login,
   loginPage: loginPage,
-  signupAuth: signup.auth,
+  logout: logout,
+  signup: signup.authenticate,
   signupPage: signup.page
 }

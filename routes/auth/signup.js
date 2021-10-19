@@ -6,7 +6,7 @@ signup.page = (req, res, next) => {
   res.render('auth/signup');
 }
 
-signup.auth = passport.authenticate('local-signup', {
+signup.authenticate = passport.authenticate('local-signup', {
   failureFlash: true, // { message: 'Email already taken', type: 'messageFailure' }
   failureRedirect: '/signup',
   successFlash: true, // { message: 'Successfully signed up.', type: 'messageSuccess' }

@@ -7,7 +7,7 @@ const loginPage = (req, res, next) => {
 /**
  * Authenticate user using Passport.js Local Strategy - https://github.com/jaredhanson/passport-local
  */
-const loginAuth = passport.authenticate('local-login', {
+const login = passport.authenticate('local-login', {
   // failureFlash: {
   //   type: 'messageFailure',
   //   message: 'Invalid email and/ or password.'
@@ -36,6 +36,6 @@ const loginAuth = passport.authenticate('local-login', {
 );
 
 module.exports = {
-  loginAuth,
+  login,
   loginPage
 };

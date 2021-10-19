@@ -6,14 +6,16 @@ const pages   = require('./pages');
 const smarty  = require('./smarty');
 const users   = require('./users');
 
-const { requireLogin } = require('../middleware/auth');
+const { requireAdmin, requireLogin, requireSignup } = require('../middleware/auth');
 
 /**
  * Pages endpoints
  */
 
 router
-  .get('/', pages.home);
+  .get('/', pages.home)
+  .get('/admin', requireAdmin, pages.admin)
+  .get('/special', requireSignup, pages.special);
 
 /**
  * Users endpoints
@@ -27,9 +29,10 @@ router
  */
 router
   .get('/login', auth.loginPage)
-  .post('/login', auth.loginAuth)
+  .post('/login', auth.login)
+  .get('/logout', auth.logout)
   .get('/signup', auth.signupPage)
-  .post('/signup', auth.signupAuth);
+  .post('/signup', auth.signup);
 
 /**
  * Smarty endpoints

@@ -29,7 +29,6 @@ users.profile = async (req, res, next) => {
     }
   };
   const user = await UsersRepository.getOneBy('id', ObjectId(id), options);
-  console.log(user);
   res.render('users/profile', {
     user: user
   });

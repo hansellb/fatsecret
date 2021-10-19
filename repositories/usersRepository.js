@@ -13,7 +13,8 @@ const UserRepository = {
     return Users.findOne({ [property]: value }, options);
   },
   add: (user) => {
-    return Users.insertOne(user);
+    return Users.insertOne(user); // insert can create duplicates
+    // return Users.updateOne(user, { $set: user }, { upsert: true });
   }
 }
 
